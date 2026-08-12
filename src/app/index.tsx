@@ -1,61 +1,129 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { HA_HTTP_URL } from '@/constants/ha-config';
+import { Spacing } from '@/constants/theme';
+import { WatchedDeviceState, useHomeAssistant } from '@/hooks/use-home-assistant';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+const STATUS_LABEL: Record<string, string> = {
+  idle: 'Idle',
+  connecting: 'Connecting…',
+  authenticating: 'Authenticating…',
+  connected: 'Connected',
+  auth_invalid: 'Auth invalid',
+  error: 'Reconnecting…',
+  closed: 'Closed',
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  idle: '#808080',
+  connecting: '#d9a441',
+  authenticating: '#d9a441',
+  connected: '#3ecf5f',
+  auth_invalid: '#e5484d',
+  error: '#e5484d',
+  closed: '#808080',
+};
+
+function formatTime(ts: number | null) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString([], { hour12: false });
+}
+
+function DeviceCard({ device }: { device: WatchedDeviceState }) {
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <ThemedView type="backgroundElement" style={styles.deviceCard}>
+      <ThemedText type="smallBold">{device.label ?? device.id}</ThemedText>
+      <ThemedText type="code" themeColor="textSecondary">
+        {device.id}
+      </ThemedText>
+      {device.entities.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Resolving entities…
+        </ThemedText>
+      ) : (
+        device.entities.map((e) => (
+          <View key={e.entityId} style={styles.entityRow}>
+            <ThemedText type="small" style={styles.entityName}>
+              {e.name ?? e.entityId}
+            </ThemedText>
+            <ThemedText type="code">{e.state ?? '—'}</ThemedText>
+          </View>
+        ))
+      )}
+    </ThemedView>
   );
 }
 
 export default function HomeScreen() {
+  const { status, haVersion, error, devices, events } = useHomeAssistant();
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <View style={[styles.statusDot, { backgroundColor: STATUS_COLOR[status] ?? '#808080' }]} />
+            <ThemedText type="title" style={styles.title}>
+              {STATUS_LABEL[status] ?? status}
+            </ThemedText>
+          </View>
+          <ThemedText type="small" themeColor="textSecondary">
+            {HA_HTTP_URL || 'no server url set'}
+            {haVersion ? ` · HA ${haVersion}` : ''}
           </ThemedText>
-        </ThemedView>
+          {error && (
+            <ThemedText type="small" style={styles.error}>
+              {error}
+            </ThemedText>
+          )}
+        </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+        <View style={styles.body}>
+          <View style={styles.devicesColumn}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+              Watched devices ({devices.length})
+            </ThemedText>
+            <FlatList
+              data={devices}
+              keyExtractor={(d) => d.id}
+              renderItem={({ item }) => <DeviceCard device={item} />}
+              contentContainerStyle={styles.devicesList}
+            />
+          </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
+          <View style={styles.eventsColumn}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+              Live events ({events.length})
+            </ThemedText>
+            <FlatList
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              data={events}
+              keyExtractor={(item) => String(item.key)}
+              renderItem={({ item }) => (
+                <ThemedView type="backgroundElement" style={styles.eventRow}>
+                  <ThemedText type="small" style={styles.eventTime}>
+                    {formatTime(item.receivedAt)}
+                  </ThemedText>
+                  <View style={styles.eventBody}>
+                    <ThemedText type="smallBold">{item.friendlyName ?? item.entityId}</ThemedText>
+                    <ThemedText type="code">
+                      {item.entityId}: {item.oldState ?? '—'} → {item.newState ?? '—'}
+                    </ThemedText>
+                  </View>
+                </ThemedView>
+              )}
+              ListEmptyComponent={
+                <ThemedText type="small" themeColor="textSecondary">
+                  Waiting for state_changed events from watched devices…
+                </ThemedText>
+              }
+            />
+          </View>
+        </View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -64,35 +132,85 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
   safeArea: {
     flex: 1,
     paddingHorizontal: Spacing.four,
-    alignItems: 'center',
+    paddingTop: Spacing.three,
     gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
   },
-  heroSection: {
+  header: {
+    gap: Spacing.half,
+  },
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    gap: Spacing.two,
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   title: {
-    textAlign: 'center',
+    fontSize: 28,
+    lineHeight: 32,
   },
-  code: {
+  error: {
+    color: '#e5484d',
+  },
+  body: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: Spacing.four,
+  },
+  devicesColumn: {
+    flex: 1,
+    gap: Spacing.two,
+  },
+  eventsColumn: {
+    flex: 1,
+    gap: Spacing.two,
+  },
+  sectionLabel: {
     textTransform: 'uppercase',
   },
-  stepContainer: {
+  devicesList: {
+    gap: Spacing.two,
+    paddingBottom: Spacing.four,
+  },
+  deviceCard: {
+    borderRadius: Spacing.two,
+    padding: Spacing.three,
+    gap: Spacing.half,
+  },
+  entityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  entityName: {
+    flexShrink: 1,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    gap: Spacing.two,
+    paddingBottom: Spacing.four,
+  },
+  eventRow: {
+    flexDirection: 'row',
     gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    padding: Spacing.two,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+  },
+  eventTime: {
+    minWidth: 70,
+  },
+  eventBody: {
+    flex: 1,
+    gap: 2,
   },
 });
