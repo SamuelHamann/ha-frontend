@@ -5,11 +5,12 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import AppSidebar from '@/components/app-sidebar';
+import { HomeAssistantProvider } from '@/providers/home-assistant-provider';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   useEffect(() => {
@@ -21,7 +22,9 @@ export default function TabLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
-      <AppTabs />
+      <HomeAssistantProvider>
+        <AppSidebar />
+      </HomeAssistantProvider>
     </ThemeProvider>
   );
 }

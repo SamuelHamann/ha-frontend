@@ -252,3 +252,5 @@ export function useHomeAssistant() {
 
   return { status, haVersion, error, devices, events };
 }
+
+export type UseHomeAssistantResult = ReturnType<typeof useHomeAssistant>;
