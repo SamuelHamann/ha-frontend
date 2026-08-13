@@ -5,7 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { HA_HTTP_URL } from '@/constants/ha-config';
 import { Spacing } from '@/constants/theme';
-import { WatchedDeviceState } from '@/hooks/use-home-assistant';
+import { EVENT_RETENTION_MS, WatchedDeviceState } from '@/hooks/use-home-assistant';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -84,7 +84,7 @@ export default function TechnicalsScreen() {
 
           <View style={styles.eventsColumn}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-              Live events ({events.length})
+              Live events · last {EVENT_RETENTION_MS / 3600000}h ({events.length})
             </ThemedText>
             <FlatList
               style={styles.list}
