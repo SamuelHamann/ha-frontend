@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -141,10 +141,16 @@ export default function TasksScreen() {
     return { monthStart: start, monthEnd: end };
   }, [monthAnchor]);
 
-  const { events, items, loading, error, connected, setItemStatus } = useAgenda(
+  const { events, items, todosLoading, error, connected, setItemStatus } = useAgenda(
     monthStart,
     monthEnd,
   );
+
+  // Stable identity: MonthCalendar builds its swipe gesture from this, and a fresh callback
+  // every render would rebuild the gesture every render too.
+  const changeMonth = useCallback((delta: number) => {
+    setMonthAnchor((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+  }, []);
 
   const selectedEvents = useMemo(
     () => events.filter((e) => eventDayKeys(e).includes(selectedKey)),
@@ -189,9 +195,7 @@ export default function TasksScreen() {
               events={events}
               selectedKey={selectedKey}
               onSelectDay={setSelectedKey}
-              onChangeMonth={(delta) =>
-                setMonthAnchor((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1))
-              }
+              onChangeMonth={changeMonth}
             />
 
             <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
@@ -231,7 +235,7 @@ export default function TasksScreen() {
           <View style={styles.tasksColumn}>
             <View style={styles.tasksHeader}>
               <ThemedText type="smallBold">Inbox</ThemedText>
-              {loading ? (
+              {todosLoading ? (
                 <ActivityIndicator size="small" />
               ) : (
                 <ThemedText type="small" themeColor="textSecondary">
@@ -241,7 +245,7 @@ export default function TasksScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.listContent}>
-              {open.length === 0 && done.length === 0 && !loading && (
+              {open.length === 0 && done.length === 0 && !todosLoading && (
                 <ThemedText type="small" themeColor="textSecondary">
                   No tasks
                 </ThemedText>

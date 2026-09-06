@@ -1,13 +1,77 @@
 import { SymbolView } from 'expo-symbols';
+import { useMemo, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { BIRTHDAY_CALENDAR_ENTITY_ID, COLLECTION_CALENDAR_ENTITY_ID } from '@/config/agenda';
 import { Spacing } from '@/constants/theme';
 import type { CalendarEvent } from '@/hooks/use-agenda';
 import { useTheme } from '@/hooks/use-theme';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+
+/** Horizontal travel before a drag counts as a month swipe rather than a tap or a scroll. */
+const SWIPE_SLOP = 20;
+/** Either a long enough drag or a quick flick flips the month. */
+const SWIPE_DISTANCE = 50;
+const SWIPE_VELOCITY = 400;
+
+export type DayBadge = 'garbage' | 'recycling' | 'compost' | 'birthday';
+
+/** Drawn left-to-right in this order so a day's icons never shuffle between renders. */
+const BADGE_ORDER: DayBadge[] = ['garbage', 'recycling', 'compost', 'birthday'];
+
+const BADGE_ICONS: Record<DayBadge, ComponentProps<typeof SymbolView>['name']> = {
+  garbage: { ios: 'trash.fill', android: 'delete', web: 'delete' },
+  recycling: { ios: 'arrow.3.trianglepath', android: 'recycling', web: 'recycling' },
+  compost: { ios: 'leaf.fill', android: 'compost', web: 'compost' },
+  birthday: { ios: 'birthday.cake.fill', android: 'cake', web: 'cake' },
+};
+
+/** Lowercase and strip accents, so 'Récupération' and 'Recuperation' both match. */
+function normalize(s: string) {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // combining accents left behind by NFD
+    .toLowerCase();
+}
+
+/**
+ * Which marker, if any, an event earns. The pickup calendar is the Ville de Lévis feed, whose
+ * summaries are French ('Récupération | …', 'Compostage | …', 'Déchets domestiques | …'); the
+ * English words are matched too in case the source is ever swapped for an English one.
+ */
+export function badgeForEvent(event: CalendarEvent): DayBadge | null {
+  if (event.calendar === BIRTHDAY_CALENDAR_ENTITY_ID) return 'birthday';
+
+  const text = normalize(event.summary ?? '');
+  if (/anniversaire|birthday/.test(text)) return 'birthday';
+  if (/compost/.test(text)) return 'compost';
+  if (/recup|recycl/.test(text)) return 'recycling';
+  if (/dechet|ordure|garbage|trash/.test(text)) return 'garbage';
+  return null;
+}
+
+/**
+ * Badges per day key, deduplicated — two compost events on one day still draw one leaf.
+ */
+export function badgesByDay(events: CalendarEvent[]): Map<string, DayBadge[]> {
+  const found = new Map<string, Set<DayBadge>>();
+  for (const event of events) {
+    const badge = badgeForEvent(event);
+    if (!badge) continue;
+    for (const key of eventDayKeys(event)) {
+      const set = found.get(key) ?? new Set<DayBadge>();
+      set.add(badge);
+      found.set(key, set);
+    }
+  }
+  return new Map(
+    [...found].map(([key, set]) => [key, BADGE_ORDER.filter((b) => set.has(b))] as const),
+  );
+}
 
 export function toDayKey(d: Date) {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -37,7 +101,12 @@ export function eventDayKeys(event: CalendarEvent): string[] {
   return keys;
 }
 
-/** Monday-first grid covering the whole month, padded to complete weeks. */
+/**
+ * Monday-first grid covering the whole month, padded to complete weeks and grouped into rows
+ * of exactly seven. The grouping matters: laying all 42 cells out as one `flexWrap` row with
+ * `width: 100/7 %` drops the last column, because seven rounded-up percentage widths add up to
+ * slightly more than the container and Yoga wraps the seventh cell onto its own line.
+ */
 function buildGrid(monthAnchor: Date) {
   const first = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1);
   const offset = (first.getDay() + 6) % 7; // JS weeks start Sunday; shift to Monday
@@ -51,7 +120,11 @@ function buildGrid(monthAnchor: Date) {
     days.push(d);
   }
   // Trim a trailing all-next-month week when the month doesn't need 6 rows.
-  return days.slice(0, days[35].getMonth() === monthAnchor.getMonth() ? 42 : 35);
+  const used = days.slice(0, days[35].getMonth() === monthAnchor.getMonth() ? 42 : 35);
+
+  const weeks: Date[][] = [];
+  for (let i = 0; i < used.length; i += 7) weeks.push(used.slice(i, i + 7));
+  return weeks;
 }
 
 export function MonthCalendar({
@@ -70,92 +143,144 @@ export function MonthCalendar({
   const theme = useTheme();
   const todayKey = toDayKey(new Date());
 
+  // Curbside pickups are already spoken for by the watermark icons, so they don't also earn
+  // a dot — otherwise every Friday reads as a busy day.
   const countByDay = new Map<string, number>();
   for (const e of events) {
+    if (e.calendar === COLLECTION_CALENDAR_ENTITY_ID) continue;
     for (const key of eventDayKeys(e)) {
       countByDay.set(key, (countByDay.get(key) ?? 0) + 1);
     }
   }
 
-  const days = buildGrid(monthAnchor);
+  const badges = badgesByDay(events);
+
+  const weeks = buildGrid(monthAnchor);
+
+  const swipe = useMemo(
+    () =>
+      Gesture.Pan()
+        // Only take over once the drag is clearly horizontal, so a vertical one still
+        // belongs to whatever is scrolling, and a tap on a day still registers as a tap.
+        .activeOffsetX([-SWIPE_SLOP, SWIPE_SLOP])
+        .failOffsetY([-SWIPE_SLOP, SWIPE_SLOP])
+        // The callback sets React state, so it has to run on the JS thread rather than as
+        // a worklet on the UI thread.
+        .runOnJS(true)
+        .onEnd((e) => {
+          const farEnough = Math.abs(e.translationX) > SWIPE_DISTANCE;
+          const fastEnough = Math.abs(e.velocityX) > SWIPE_VELOCITY;
+          if (!farEnough && !fastEnough) return;
+          // Dragging left pulls the next month in from the right, as on iOS calendars.
+          onChangeMonth(e.translationX < 0 ? 1 : -1);
+        }),
+    [onChangeMonth],
+  );
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => onChangeMonth(-1)}
-          accessibilityRole="button"
-          accessibilityLabel="Previous month"
-          hitSlop={8}
-          style={({ pressed }) => pressed && styles.pressed}>
-          <SymbolView
-            name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
-            tintColor={theme.textSecondary}
-            size={20}
-          />
-        </Pressable>
-        <ThemedText type="smallBold">
-          {monthAnchor.toLocaleDateString([], { month: 'long', year: 'numeric' })}
-        </ThemedText>
-        <Pressable
-          onPress={() => onChangeMonth(1)}
-          accessibilityRole="button"
-          accessibilityLabel="Next month"
-          hitSlop={8}
-          style={({ pressed }) => pressed && styles.pressed}>
-          <SymbolView
-            name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-            tintColor={theme.textSecondary}
-            size={20}
-          />
-        </Pressable>
-      </View>
-
-      <View style={styles.weekRow}>
-        {WEEKDAYS.map((w) => (
-          <ThemedText key={w} type="code" themeColor="textSecondary" style={styles.weekday}>
-            {w}
+    <GestureDetector gesture={swipe}>
+      <View style={styles.wrapper}>
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => onChangeMonth(-1)}
+            accessibilityRole="button"
+            accessibilityLabel="Previous month"
+            hitSlop={8}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
+              tintColor={theme.textSecondary}
+              size={20}
+            />
+          </Pressable>
+          <ThemedText type="smallBold">
+            {monthAnchor.toLocaleDateString([], { month: 'long', year: 'numeric' })}
           </ThemedText>
-        ))}
-      </View>
+          <Pressable
+            onPress={() => onChangeMonth(1)}
+            accessibilityRole="button"
+            accessibilityLabel="Next month"
+            hitSlop={8}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <SymbolView
+              name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+              tintColor={theme.textSecondary}
+              size={20}
+            />
+          </Pressable>
+        </View>
 
-      <View style={styles.grid}>
-        {days.map((d) => {
-          const key = toDayKey(d);
-          const inMonth = d.getMonth() === monthAnchor.getMonth();
-          const isToday = key === todayKey;
-          const isSelected = key === selectedKey;
-          const count = countByDay.get(key) ?? 0;
+        <View style={styles.weekRow}>
+          {WEEKDAYS.map((w) => (
+            <ThemedText key={w} type="code" themeColor="textSecondary" style={styles.weekday}>
+              {w}
+            </ThemedText>
+          ))}
+        </View>
 
-          return (
-            <Pressable
-              key={key}
-              onPress={() => onSelectDay(key)}
-              accessibilityRole="button"
-              accessibilityLabel={d.toDateString()}
-              accessibilityState={{ selected: isSelected }}
-              style={styles.dayCell}>
-              <ThemedView
-                type={isSelected ? 'backgroundSelected' : 'background'}
-                style={[styles.dayInner, isToday && { borderColor: '#3c87f7', borderWidth: 1.5 }]}>
-                <ThemedText
-                  type={isToday ? 'smallBold' : 'small'}
-                  themeColor={inMonth ? 'text' : 'textSecondary'}
-                  style={!inMonth && styles.outsideMonth}>
-                  {d.getDate()}
-                </ThemedText>
-                <View style={styles.dotRow}>
-                  {count > 0 &&
-                    Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                      <View key={i} style={[styles.dot, { backgroundColor: theme.text }]} />
-                    ))}
-                </View>
-              </ThemedView>
-            </Pressable>
-          );
-        })}
+        <View style={styles.grid}>
+          {weeks.map((week) => (
+            <View key={toDayKey(week[0])} style={styles.weekDays}>
+              {week.map((d) => {
+                const key = toDayKey(d);
+                const inMonth = d.getMonth() === monthAnchor.getMonth();
+                const isToday = key === todayKey;
+                const isSelected = key === selectedKey;
+                const count = countByDay.get(key) ?? 0;
+                const dayBadges = badges.get(key) ?? [];
+                // Shrink as more pile up (compost + pickup + a birthday can share a day) so
+                // the row stays inside the cell instead of wrapping onto the number.
+                const badgeSize = dayBadges.length >= 3 ? 14 : dayBadges.length === 2 ? 17 : 20;
+
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => onSelectDay(key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={[d.toDateString(), ...dayBadges].join(', ')}
+                    accessibilityState={{ selected: isSelected }}
+                    style={styles.dayCell}>
+                    <ThemedView
+                      type={isSelected ? 'backgroundSelected' : 'background'}
+                      style={[
+                        styles.dayInner,
+                        isToday && { borderColor: '#3c87f7', borderWidth: 1.5 },
+                      ]}>
+                      {dayBadges.length > 0 && (
+                        <View
+                          style={[styles.badgeLayer, !inMonth && styles.badgeLayerOutside]}
+                          pointerEvents="none">
+                          {dayBadges.map((badge) => (
+                            <SymbolView
+                              key={badge}
+                              name={BADGE_ICONS[badge]}
+                              tintColor={theme.textSecondary}
+                              size={badgeSize}
+                            />
+                          ))}
+                        </View>
+                      )}
+                      <ThemedText
+                        type={isToday ? 'smallBold' : 'small'}
+                        themeColor={inMonth ? 'text' : 'textSecondary'}
+                        style={!inMonth && styles.outsideMonth}>
+                        {d.getDate()}
+                      </ThemedText>
+                      <View style={styles.dotRow}>
+                        {count > 0 &&
+                          Array.from({ length: Math.min(count, 3) }).map((_, i) => (
+                            <View key={i} style={[styles.dot, { backgroundColor: theme.text }]} />
+                          ))}
+                      </View>
+                    </ThemedView>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </View>
-    </View>
+    </GestureDetector>
   );
 }
 
@@ -179,12 +304,16 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
+  /** Holds the week rows tight together, out of `wrapper`'s gap. */
   grid: {
+    gap: 0,
+  },
+  /** One row per week — see buildGrid for why the cells aren't wrapped percentages. */
+  weekDays: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
   },
   dayCell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     aspectRatio: 1.15,
     padding: 2,
   },
@@ -192,11 +321,35 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: Spacing.two,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
+    // Date pinned to the top, event dots to the bottom, watermark centred behind both.
+    justifyContent: 'space-between',
+    paddingVertical: 3,
   },
   outsideMonth: {
     opacity: 0.4,
+  },
+  /**
+   * Sits behind the date and the event dots: absolutely filling the cell keeps it out of the
+   * layout, and rendering it before its siblings puts it underneath them. Faint enough to read
+   * as a watermark, opaque enough to still be legible against either theme's background.
+   */
+  badgeLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    alignContent: 'center',
+    justifyContent: 'center',
+    gap: 1,
+    opacity: 0.3,
+  },
+  /** Fainter still on the padding days, which are themselves dimmed. */
+  badgeLayerOutside: {
+    opacity: 0.15,
   },
   dotRow: {
     flexDirection: 'row',
