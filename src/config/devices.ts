@@ -52,6 +52,12 @@ export const DEVICE_IDS = {
   bulbBedsideLeft: '3e30ef859bf937ae97aba54b7946b929',
   bulbBedsideRight: '1cbbff8a65358f0c9d8e91c77d5285a4',
   outletOfficeDesk: '8019b4509cdb1fefbcff801badaf0faf',
+
+  /** Occupancy sensors. Only these four rooms have one. */
+  presenceOffice: 'ea6dd79117f9ad5a2845236d7b54af02',
+  presenceBasement: '579946e44532c38488e107d9a69ae03c',
+  presenceGym: '2c5f5fe6c19e35c03ef1c086f2e3bce8',
+  presenceLaundry: '4b1d16aca2fe1a77d8ae1f6398e84e97',
 } as const;
 
 export const WATCHED_DEVICES: WatchedDevice[] = [
@@ -76,4 +82,8 @@ export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.bulbBedsideLeft, label: 'Bulb — Bedside left' },
   { id: DEVICE_IDS.bulbBedsideRight, label: 'Bulb — Bedside right' },
   { id: DEVICE_IDS.outletOfficeDesk, label: 'Outlet — Office desk' },
+  { id: DEVICE_IDS.presenceOffice, label: 'Presence — Office' },
+  { id: DEVICE_IDS.presenceBasement, label: 'Presence — Basement' },
+  { id: DEVICE_IDS.presenceGym, label: 'Presence — Gym' },
+  { id: DEVICE_IDS.presenceLaundry, label: 'Presence — Laundry' },
 ];

@@ -9,9 +9,11 @@ import { ControlHistory } from '@/components/control-history';
 import { ControlSwitch } from '@/components/control-switch';
 import { ControlThermostat } from '@/components/control-thermostat';
 import { ModalSheet } from '@/components/modal-sheet';
+import { PresenceBadge } from '@/components/presence-badge';
 import { DEVICE_IDS } from '@/config/devices';
 import { POOL_PUMP_SWITCH_SUFFIX, type Room, type RoomControl } from '@/config/home';
 import { Palette, Spacing, Type } from '@/constants/styles';
+import type { PresenceState } from '@/hooks/use-room-presence';
 
 /** The pump is the outlet named by POOL_PUMP_SWITCH_SUFFIX — gang 0 of the two-outlet plug. */
 const POOL_PUMP_GANG = Number(POOL_PUMP_SWITCH_SUFFIX.slice(-1)) - 1;
@@ -63,10 +65,12 @@ function Control({ control }: { control: RoomControl }) {
 
 export function RoomModal({
   room,
+  presence,
   visible,
   onClose,
 }: {
   room: Room | null;
+  presence?: PresenceState;
   visible: boolean;
   onClose: () => void;
 }) {
@@ -80,12 +84,14 @@ export function RoomModal({
       title={room.name}
       subtitle={count === 0 ? 'Nothing connected yet' : `${count} device${count === 1 ? '' : 's'}`}
       icon={room.icon}
-      onClose={onClose}>
+      accessory={<PresenceBadge presence={presence} roomName={room.name} size={20} />}
+      onClose={onClose}
+    >
       {count === 0 ? (
         <View style={styles.empty}>
           <Text style={Type.bodyMuted}>
-            No devices are wired up in here yet. This room is a placeholder — add its devices
-            to ROOMS in src/config/home.ts once they exist in Home Assistant.
+            No devices are wired up in here yet. This room is a placeholder — add its devices to
+            ROOMS in src/config/home.ts once they exist in Home Assistant.
           </Text>
         </View>
       ) : (

@@ -16,6 +16,7 @@ export function ModalSheet({
   title,
   subtitle,
   icon,
+  accessory,
   onClose,
   children,
 }: {
@@ -23,6 +24,8 @@ export function ModalSheet({
   title: string;
   subtitle?: string;
   icon?: SymbolViewProps['name'];
+  /** Rendered in the header, before the close button — a room's presence marker, say. */
+  accessory?: ReactNode;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -57,6 +60,7 @@ export function ModalSheet({
                 <Text style={Type.heading}>{title.toUpperCase()}</Text>
                 {!!subtitle && <Text style={Type.label}>{subtitle.toUpperCase()}</Text>}
               </View>
+              {accessory}
               <Pressable
                 onPress={onClose}
                 accessibilityRole="button"

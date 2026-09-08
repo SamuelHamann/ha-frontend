@@ -5,19 +5,23 @@ import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { LightButton } from '@/components/light-button';
+import { PresenceBadge } from '@/components/presence-badge';
 import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 import type { Room } from '@/config/home';
 import type { RoomLightState } from '@/hooks/use-room-lights';
+import type { PresenceState } from '@/hooks/use-room-presence';
 
 export function RoomCard({
   room,
   light,
+  presence,
   onToggle,
   onOpen,
   fullWidth,
 }: {
   room: Room;
   light: RoomLightState;
+  presence?: PresenceState;
   onToggle: (entityId: string) => Promise<void>;
   onOpen: (room: Room) => void;
   fullWidth?: boolean;
@@ -35,7 +39,8 @@ export function RoomCard({
         fullWidth ? styles.cardFull : styles.cardHalf,
         light.on && styles.cardOn,
         pressed && GlobalStyles.pressed,
-      ]}>
+      ]}
+    >
       <View style={styles.iconChip}>
         <SymbolView
           name={room.icon}
@@ -45,11 +50,20 @@ export function RoomCard({
       </View>
 
       <View style={styles.text}>
-        <Text style={styles.name} numberOfLines={1}>
-          {room.name.toUpperCase()}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {room.name.toUpperCase()}
+          </Text>
+          <PresenceBadge presence={presence} roomName={room.name} />
+        </View>
         <Text style={Type.mono}>
-          {!light.entityId ? 'NO LIGHT' : light.unavailable ? 'UNAVAILABLE' : light.on ? 'ON' : 'OFF'}
+          {!light.entityId
+            ? 'NO LIGHT'
+            : light.unavailable
+              ? 'UNAVAILABLE'
+              : light.on
+                ? 'ON'
+                : 'OFF'}
         </Text>
       </View>
 
@@ -94,8 +108,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
   name: {
     ...Type.body,
     letterSpacing: 0.8,
+    flexShrink: 1,
   },
 });

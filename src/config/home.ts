@@ -68,6 +68,8 @@ export interface Room {
   icon: SymbolViewProps['name'];
   /** Absent when the room has no controllable light — the card shows a dead button. */
   light?: RoomLight;
+  /** Occupancy sensor device. Absent when the room has none — no icon is shown at all. */
+  presenceDeviceId?: string;
   /** Devices listed in the room's modal. Empty means a placeholder modal. */
   controls: RoomControl[];
 }
@@ -117,6 +119,7 @@ export const ROOMS: Room[] = [
     name: 'Office',
     icon: { ios: 'desktopcomputer', android: 'desk', web: 'desk' },
     light: { deviceId: DEVICE_IDS.lightOffice, gang: 0 },
+    presenceDeviceId: DEVICE_IDS.presenceOffice,
     controls: [
       { kind: 'outlet', label: 'Wall outlet', deviceId: DEVICE_IDS.outletOfficeDesk },
       { kind: 'bulb', label: 'Mushroom lamp', deviceId: DEVICE_IDS.lightOffice },
@@ -127,6 +130,7 @@ export const ROOMS: Room[] = [
     name: 'Gym',
     icon: { ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' },
     light: { deviceId: DEVICE_IDS.lightGym, gang: 0 },
+    presenceDeviceId: DEVICE_IDS.presenceGym,
     controls: [
       // The presence automation drives the left gang, so that is the main light.
       { kind: 'switch', label: 'Main light', deviceId: DEVICE_IDS.lightGym, gang: 0 },
@@ -139,6 +143,7 @@ export const ROOMS: Room[] = [
     icon: { ios: 'wineglass.fill', android: 'wine_bar', web: 'wine_bar' },
     // The main light is the first gang of the wall switch.
     light: { deviceId: DEVICE_IDS.lightBasement, gang: 0 },
+    presenceDeviceId: DEVICE_IDS.presenceBasement,
     controls: [
       { kind: 'switch', label: 'Main light', deviceId: DEVICE_IDS.lightBasement, gang: 0 },
       { kind: 'switch', label: 'Accent light', deviceId: DEVICE_IDS.lightBasement, gang: 1 },
@@ -149,6 +154,7 @@ export const ROOMS: Room[] = [
     name: 'Laundry',
     icon: { ios: 'washer.fill', android: 'local_laundry_service', web: 'local_laundry_service' },
     light: { deviceId: DEVICE_IDS.lightLaundry, gang: 0 },
+    presenceDeviceId: DEVICE_IDS.presenceLaundry,
     controls: [
       { kind: 'switch', label: 'Main light', deviceId: DEVICE_IDS.lightLaundry, gang: 0 },
       { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatLaundry },

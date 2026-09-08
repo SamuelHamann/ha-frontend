@@ -35,6 +35,7 @@ import { conditionIcon, conditionLabel } from '@/constants/weather-icons';
 import { useHaTime, type ClockSource, type HaClock } from '@/hooks/use-ha-time';
 import { usePool, type PumpStatus } from '@/hooks/use-pool';
 import { useRoomLights, type RoomLightState } from '@/hooks/use-room-lights';
+import { useRoomPresence } from '@/hooks/use-room-presence';
 import { usePower } from '@/hooks/use-power';
 import { useThermostats } from '@/hooks/use-thermostats';
 import { useWeather, type ForecastEntry } from '@/hooks/use-weather';
@@ -408,7 +409,8 @@ function PowerPanel({ clock }: { clock: HaClock }) {
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel="Power history"
-        style={({ pressed }) => [styles.powerBody, pressed && GlobalStyles.pressed]}>
+        style={({ pressed }) => [styles.powerBody, pressed && GlobalStyles.pressed]}
+      >
         <View style={styles.powerRow}>
           <SymbolView
             name={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
@@ -480,7 +482,8 @@ function PoolPanel() {
         accessibilityRole="switch"
         accessibilityState={{ checked: running, disabled: !pumpEntityId }}
         accessibilityLabel="Pool pump"
-        style={({ pressed }) => [styles.poolBody, pressed && GlobalStyles.pressed]}>
+        style={({ pressed }) => [styles.poolBody, pressed && GlobalStyles.pressed]}
+      >
         <Text style={Type.label}>POOL</Text>
 
         <View style={GlobalStyles.spread}>
@@ -587,9 +590,7 @@ function AcPanel() {
           />
         )}
         <Text style={[Type.body, styles.acLabel]}>FAN</Text>
-        <Text style={[styles.acValue, { color: accent }]}>
-          {on ? fan.toUpperCase() : 'OFF'}
-        </Text>
+        <Text style={[styles.acValue, { color: accent }]}>{on ? fan.toUpperCase() : 'OFF'}</Text>
       </View>
 
       <View style={[GlobalStyles.tile, styles.acRow]}>
@@ -614,6 +615,7 @@ const NO_LIGHT: RoomLightState = { entityId: null, on: false, unavailable: false
 function RoomsGrid() {
   const allRooms = useMemo(() => [...ROOMS, OUTDOOR_ROOM], []);
   const { states, toggle } = useRoomLights(allRooms);
+  const presence = useRoomPresence(allRooms);
   const [openRoom, setOpenRoom] = useState<Room | null>(null);
 
   return (
@@ -623,6 +625,7 @@ function RoomsGrid() {
           key={room.name}
           room={room}
           light={states.get(room.name) ?? NO_LIGHT}
+          presence={presence.get(room.name)}
           onToggle={toggle}
           onOpen={setOpenRoom}
         />
@@ -630,12 +633,18 @@ function RoomsGrid() {
       <RoomCard
         room={OUTDOOR_ROOM}
         light={states.get(OUTDOOR_ROOM.name) ?? NO_LIGHT}
+        presence={presence.get(OUTDOOR_ROOM.name)}
         onToggle={toggle}
         onOpen={setOpenRoom}
         fullWidth
       />
 
-      <RoomModal room={openRoom} visible={!!openRoom} onClose={() => setOpenRoom(null)} />
+      <RoomModal
+        room={openRoom}
+        presence={openRoom ? presence.get(openRoom.name) : undefined}
+        visible={!!openRoom}
+        onClose={() => setOpenRoom(null)}
+      />
     </View>
   );
 }
