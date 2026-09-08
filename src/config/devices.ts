@@ -20,10 +20,16 @@ export const DEVICE_IDS = {
   gardenSoilSensor: '43774a897b41752d4c35453e07e3f68c',
   /** Hilo "Meter00" — the whole-house power meter, used by the Home page. */
   powerMeter: '8e722c5123c2a349d8ba10834a0797d1',
+  /** TP-Link "Outdoor pool plug" — a two-outlet plug; outlet 1 drives the pool pump. */
+  poolPlug: '52e7d6ea587cdab5c86d41901a7c6685',
+  /** SONOFF "Outdoor - Pool Thermometer" — probe in the pool. */
+  poolThermometer: '1f8245a9507e53ad512f47ffff0769dd',
 } as const;
 
 export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.weatherForecast, label: 'Weather forecast' },
   { id: DEVICE_IDS.gardenSoilSensor, label: 'Garden soil sensor' },
   { id: DEVICE_IDS.powerMeter, label: 'Power meter' },
+  { id: DEVICE_IDS.poolPlug, label: 'Pool plug' },
+  { id: DEVICE_IDS.poolThermometer, label: 'Pool thermometer' },
 ];

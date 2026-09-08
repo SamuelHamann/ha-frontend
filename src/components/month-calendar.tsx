@@ -4,16 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BIRTHDAY_CALENDAR_ENTITY_ID, COLLECTION_CALENDAR_ENTITY_ID } from '@/config/agenda';
+import { SWIPE_DISTANCE, SWIPE_SLOP, SWIPE_VELOCITY } from '@/constants/gestures';
 import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 import type { CalendarEvent } from '@/hooks/use-agenda';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-
-/** Horizontal travel before a drag counts as a month swipe rather than a tap or a scroll. */
-const SWIPE_SLOP = 20;
-/** Either a long enough drag or a quick flick flips the month. */
-const SWIPE_DISTANCE = 50;
-const SWIPE_VELOCITY = 400;
 
 export type DayBadge = 'garbage' | 'recycling' | 'compost' | 'birthday';
 

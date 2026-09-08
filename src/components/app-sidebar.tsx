@@ -44,13 +44,13 @@ export default function AppSidebar() {
             paddingLeft: insets.left,
           },
         ]}>
-        <TabTrigger name="home" href="/home" asChild>
+        <TabTrigger name="home" href="/" asChild>
           <SidebarIconButton
             accessibilityLabel="Home"
             icon={{ ios: 'house.fill', android: 'home', web: 'home' }}
           />
         </TabTrigger>
-        <TabTrigger name="floorplans" href="/" asChild>
+        <TabTrigger name="floorplans" href="/floorplans" asChild>
           <SidebarIconButton
             accessibilityLabel="Floorplans"
             icon={{ ios: 'square.grid.2x2', android: 'grid_view', web: 'grid_view' }}

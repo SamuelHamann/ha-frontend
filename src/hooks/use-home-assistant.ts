@@ -250,7 +250,12 @@ export function useHomeAssistant() {
             name: friendlyName,
             state: newState,
             attributes,
-            lastChanged: Date.now(),
+            // HA's own timestamp for the change, not the moment it reached this device —
+            // the initial `get_states` seeds it the same way, so the two agree. Falls back
+            // to the local clock only if the event somehow arrives without one.
+            lastChanged: data.new_state?.last_changed
+              ? new Date(data.new_state.last_changed).getTime()
+              : Date.now(),
           });
 
           setEvents((prev) =>
