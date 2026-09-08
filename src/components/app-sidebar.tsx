@@ -5,8 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NotificationBell } from '@/components/notification-bell';
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { GlobalStyles, Palette, Radius, Spacing } from '@/constants/styles';
 
 /** Routes that render edge-to-edge: no top bar, so the page gets the full content area. */
 const FULL_BLEED_ROUTES = new Set(['/food']);
@@ -17,22 +16,20 @@ type SidebarIconButtonProps = TabTriggerSlotProps & {
 };
 
 function SidebarIconButton({ icon, accessibilityLabel, isFocused, style, ...props }: SidebarIconButtonProps) {
-  const theme = useTheme();
   return (
     <Pressable
       {...props}
       accessibilityRole="tab"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: !!isFocused }}
-      style={[styles.iconButton, isFocused && { backgroundColor: theme.backgroundSelected }]}>
-      <SymbolView name={icon} tintColor={isFocused ? theme.text : theme.textSecondary} size={26} />
+      style={[styles.iconButton, isFocused && styles.iconButtonActive]}>
+      <SymbolView name={icon} tintColor={isFocused ? Palette.primary : Palette.textMuted} size={26} />
     </Pressable>
   );
 }
 
 export default function AppSidebar() {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
   const pathname = usePathname();
   const fullBleed = FULL_BLEED_ROUTES.has(pathname);
 
@@ -45,7 +42,6 @@ export default function AppSidebar() {
             paddingTop: insets.top + Spacing.three,
             paddingBottom: insets.bottom + Spacing.three,
             paddingLeft: insets.left,
-            backgroundColor: theme.backgroundElement,
           },
         ]}>
         <TabTrigger name="floorplans" href="/" asChild>
@@ -104,11 +100,14 @@ export default function AppSidebar() {
 
 const styles = StyleSheet.create({
   root: {
-    flex: 1,
+    ...GlobalStyles.screen,
     flexDirection: 'row',
   },
   sidebar: {
     width: 88,
+    backgroundColor: Palette.panel,
+    borderRightWidth: 1,
+    borderRightColor: Palette.border,
     // TabList defaults to row + space-between; both must be overridden for a vertical rail.
     flexDirection: 'column',
     justifyContent: 'flex-start',
@@ -130,8 +129,14 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 56,
     height: 56,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconButtonActive: {
+    backgroundColor: Palette.panelActive,
+    borderColor: Palette.primary,
   },
 });

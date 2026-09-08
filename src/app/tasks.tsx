@@ -1,15 +1,13 @@
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionNotice } from '@/components/connection-notice';
 import { MonthCalendar, eventDayKeys, toDayKey } from '@/components/month-calendar';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Panel } from '@/components/panel';
+import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 import { useAgenda, type CalendarEvent, type TodoItem } from '@/hooks/use-agenda';
-import { useTheme } from '@/hooks/use-theme';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
 function isAllDay(event: CalendarEvent) {
@@ -17,35 +15,101 @@ function isAllDay(event: CalendarEvent) {
 }
 
 function eventTimeLabel(event: CalendarEvent) {
-  if (isAllDay(event)) return 'All day';
+  if (isAllDay(event)) return 'ALL DAY';
   const start = new Date(event.start);
   const end = new Date(event.end);
   const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return Number.isNaN(end.getTime()) ? fmt(start) : `${fmt(start)} – ${fmt(end)}`;
 }
 
-function dueLabel(due?: string) {
-  if (!due) return null;
-  const d = new Date(due.includes('T') ? due : `${due}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return due;
-
-  const today = new Date();
-  const dayDiff = Math.round(
-    (new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() -
-      new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) /
-      86400000,
-  );
-  if (dayDiff === 0) return 'Today';
-  if (dayDiff === 1) return 'Tomorrow';
-  if (dayDiff === -1) return 'Yesterday';
-  if (dayDiff < 0) return `${Math.abs(dayDiff)}d overdue`;
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+/** Midnight of the given date, so day comparisons ignore the clock. */
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function isOverdue(item: TodoItem) {
-  if (!item.due || item.status === 'completed') return false;
-  const d = new Date(item.due.includes('T') ? item.due : `${item.due}T23:59:59`);
-  return !Number.isNaN(d.getTime()) && d.getTime() < Date.now();
+function parseDue(due: string) {
+  const d = new Date(due.includes('T') ? due : `${due}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Time of day for a task that has one; grouping already carries the date. */
+function dueTimeLabel(due?: string) {
+  if (!due || !due.includes('T')) return null;
+  const d = parseDue(due);
+  return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+}
+
+interface TaskGroup {
+  key: string;
+  /** Weekday, day and month — e.g. "MONDAY, 8 SEPTEMBER". */
+  label: string;
+  /** Relative marker shown beside the label: OVERDUE / TODAY / TOMORROW. */
+  note: string | null;
+  overdue: boolean;
+  items: TodoItem[];
+}
+
+/**
+ * Split the open tasks into one group per due day, oldest first, with undated tasks last.
+ * Each group's label carries the weekday plus the day and month, which is what the divider
+ * in the list renders.
+ */
+function groupByDay(items: TodoItem[]): TaskGroup[] {
+  const today = startOfDay(new Date());
+  const byKey = new Map<string, { date: Date | null; items: TodoItem[] }>();
+
+  for (const item of items) {
+    const date = item.due ? parseDue(item.due) : null;
+    const key = date ? toDayKey(date) : '';
+    const group = byKey.get(key) ?? { date: date ? startOfDay(date) : null, items: [] };
+    group.items.push(item);
+    byKey.set(key, group);
+  }
+
+  return [...byKey.entries()]
+    // Undated tasks sort to the bottom; everything else runs oldest to newest.
+    .sort(([, ga], [, gb]) => {
+      if (!ga.date) return 1;
+      if (!gb.date) return -1;
+      return ga.date.getTime() - gb.date.getTime();
+    })
+    .map(([key, group]) => {
+      if (!group.date) {
+        return { key: 'undated', label: 'NO DUE DATE', note: null, overdue: false, items: group.items };
+      }
+      const dayDiff = Math.round((group.date.getTime() - today.getTime()) / 86400000);
+      const note = dayDiff < 0 ? 'OVERDUE' : dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : null;
+      return {
+        key,
+        label: group.date
+          .toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
+          .toUpperCase(),
+        note,
+        overdue: dayDiff < 0,
+        items: group.items,
+      };
+    });
+}
+
+/** Label + hairline rule; the list's day separator. */
+function DayDivider({ label, note, count, tone }: {
+  label: string;
+  note?: string | null;
+  count?: number;
+  tone?: 'default' | 'warn';
+}) {
+  return (
+    <View style={[GlobalStyles.divider, styles.dayDivider]}>
+      <Text style={[Type.label, tone === 'warn' && styles.warnText]}>{label}</Text>
+      {!!note && (
+        <View style={[GlobalStyles.chip, tone === 'warn' && styles.warnChip]}>
+          <Text style={[Type.label, tone === 'warn' && styles.warnText]}>{note}</Text>
+        </View>
+      )}
+      <View style={GlobalStyles.dividerRule} />
+      {count !== undefined && <Text style={Type.label}>{String(count).padStart(2, '0')}</Text>}
+    </View>
+  );
 }
 
 function TaskRow({
@@ -55,12 +119,10 @@ function TaskRow({
   item: TodoItem;
   onToggle: (uid: string, next: 'completed' | 'needs_action') => Promise<void>;
 }) {
-  const theme = useTheme();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const done = item.status === 'completed';
-  const overdue = isOverdue(item);
-  const due = dueLabel(item.due);
+  const time = dueTimeLabel(item.due);
 
   const toggle = async () => {
     if (pending) return;
@@ -76,54 +138,43 @@ function TaskRow({
   };
 
   return (
-    <ThemedView type="backgroundElement" style={styles.taskRow}>
-      <Pressable
-        onPress={toggle}
-        disabled={pending}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: done, disabled: pending }}
-        accessibilityLabel={item.summary}
-        hitSlop={8}
-        style={({ pressed }) => [styles.checkbox, pressed && styles.pressed]}>
+    <Pressable
+      onPress={toggle}
+      disabled={pending}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: done, disabled: pending }}
+      accessibilityLabel={item.summary}
+      style={({ pressed }) => [
+        GlobalStyles.tile,
+        styles.taskRow,
+        done && styles.taskRowDone,
+        pressed && GlobalStyles.pressed,
+      ]}>
+      <View style={styles.checkbox}>
         {pending ? (
-          <ActivityIndicator size="small" color={theme.textSecondary} />
+          <ActivityIndicator size="small" color={Palette.textMuted} />
         ) : (
           <SymbolView
             name={
               done
                 ? { ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }
-                : {
-                    ios: 'circle',
-                    android: 'radio_button_unchecked',
-                    web: 'radio_button_unchecked',
-                  }
+                : { ios: 'circle', android: 'radio_button_unchecked', web: 'radio_button_unchecked' }
             }
-            tintColor={done ? theme.textSecondary : theme.text}
+            tintColor={done ? Palette.textMuted : Palette.primary}
             size={20}
           />
         )}
-      </Pressable>
+      </View>
 
       <View style={styles.taskText}>
-        <ThemedText
-          type="small"
-          themeColor={done ? 'textSecondary' : 'text'}
-          style={done && styles.completed}>
+        <Text style={[Type.body, done && styles.completed, done && Type.bodyMuted]}>
           {item.summary}
-        </ThemedText>
-        {failed ? (
-          <ThemedText type="code" style={styles.overdue}>
-            {failed}
-          </ThemedText>
-        ) : (
-          due && (
-            <ThemedText type="code" themeColor="textSecondary" style={overdue && styles.overdue}>
-              {due}
-            </ThemedText>
-          )
-        )}
+        </Text>
+        {failed && <Text style={[Type.mono, GlobalStyles.error]}>{failed}</Text>}
       </View>
-    </ThemedView>
+
+      {!!time && !failed && <Text style={Type.mono}>{time}</Text>}
+    </Pressable>
   );
 }
 
@@ -157,196 +208,163 @@ export default function TasksScreen() {
     [events, selectedKey],
   );
 
-  const { open, done } = useMemo(
-    () => ({
-      open: items.filter((i) => i.status !== 'completed'),
+  const { groups, open, done } = useMemo(() => {
+    const openItems = items.filter((i) => i.status !== 'completed');
+    return {
+      open: openItems,
       done: items.filter((i) => i.status === 'completed'),
-    }),
-    [items],
-  );
+      groups: groupByDay(openItems),
+    };
+  }, [items]);
 
   if (!connected) {
     return (
-      <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.safeArea} edges={['bottom', 'left', 'right']}>
-          <ThemedText type="subtitle">Tasks &amp; calendar</ThemedText>
+      <View style={GlobalStyles.screen}>
+        <SafeAreaView style={GlobalStyles.content} edges={['bottom', 'left', 'right']}>
+          <Text style={Type.title}>TASKS &amp; CALENDAR</Text>
           <ConnectionNotice status={status} error={connectionError} />
         </SafeAreaView>
-      </ThemedView>
+      </View>
     );
   }
 
   const selectedDate = new Date(`${selectedKey}T00:00:00`);
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['bottom', 'left', 'right']}>
-        {error && (
-          <ThemedText type="small" style={styles.error}>
-            {error}
-          </ThemedText>
-        )}
+    <View style={GlobalStyles.screen}>
+      <SafeAreaView style={GlobalStyles.content} edges={['bottom', 'left', 'right']}>
+        {error && <Text style={[Type.mono, GlobalStyles.error]}>{error}</Text>}
 
         <View style={styles.columns}>
-          {/* Left: calendar */}
+          {/* Left: month grid, then the events on the selected day. */}
           <View style={styles.calendarColumn}>
-            <MonthCalendar
-              monthAnchor={monthAnchor}
-              events={events}
-              selectedKey={selectedKey}
-              onSelectDay={setSelectedKey}
-              onChangeMonth={changeMonth}
-            />
+            <Panel>
+              <MonthCalendar
+                monthAnchor={monthAnchor}
+                events={events}
+                selectedKey={selectedKey}
+                onSelectDay={setSelectedKey}
+                onChangeMonth={changeMonth}
+              />
+            </Panel>
 
-            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-              {selectedDate.toLocaleDateString([], {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </ThemedText>
-
-            <ScrollView contentContainerStyle={styles.listContent}>
-              {selectedEvents.length === 0 ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  No events
-                </ThemedText>
-              ) : (
-                selectedEvents.map((e, i) => (
-                  <ThemedView key={`${e.start}-${i}`} type="backgroundElement" style={styles.eventRow}>
-                    <ThemedText type="code" themeColor="textSecondary" style={styles.eventTime}>
-                      {eventTimeLabel(e)}
-                    </ThemedText>
-                    <View style={styles.eventBody}>
-                      <ThemedText type="small">{e.summary}</ThemedText>
-                      {!!e.location && (
-                        <ThemedText type="code" themeColor="textSecondary">
-                          {e.location}
-                        </ThemedText>
-                      )}
+            <Panel style={styles.flexPanel}>
+              <DayDivider
+                label={selectedDate
+                  .toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
+                  .toUpperCase()}
+                count={selectedEvents.length}
+              />
+              <ScrollView
+                contentContainerStyle={GlobalStyles.listContent}
+                showsVerticalScrollIndicator={false}>
+                {selectedEvents.length === 0 ? (
+                  <Text style={Type.bodyMuted}>No events</Text>
+                ) : (
+                  selectedEvents.map((e, i) => (
+                    <View key={`${e.start}-${i}`} style={[GlobalStyles.tile, styles.eventRow]}>
+                      <Text style={[Type.mono, styles.eventTime]}>{eventTimeLabel(e)}</Text>
+                      <View style={styles.eventBody}>
+                        <Text style={Type.body}>{e.summary}</Text>
+                        {!!e.location && <Text style={Type.mono}>{e.location}</Text>}
+                      </View>
                     </View>
-                  </ThemedView>
-                ))
-              )}
-            </ScrollView>
+                  ))
+                )}
+              </ScrollView>
+            </Panel>
           </View>
 
-          {/* Right: Todoist Inbox */}
-          <View style={styles.tasksColumn}>
-            <View style={styles.tasksHeader}>
-              <ThemedText type="smallBold">Inbox</ThemedText>
+          {/* Right: Todoist Inbox, grouped by due day. */}
+          <Panel style={styles.tasksColumn}>
+            <View style={GlobalStyles.spread}>
+              <Text style={Type.heading}>INBOX</Text>
               {todosLoading ? (
-                <ActivityIndicator size="small" />
+                <ActivityIndicator size="small" color={Palette.textMuted} />
               ) : (
-                <ThemedText type="small" themeColor="textSecondary">
-                  {open.length} open
-                </ThemedText>
+                <Text style={Type.label}>{open.length} OPEN</Text>
               )}
             </View>
 
-            <ScrollView contentContainerStyle={styles.listContent}>
+            <ScrollView
+              contentContainerStyle={GlobalStyles.listContent}
+              showsVerticalScrollIndicator={false}>
               {open.length === 0 && done.length === 0 && !todosLoading && (
-                <ThemedText type="small" themeColor="textSecondary">
-                  No tasks
-                </ThemedText>
+                <Text style={Type.bodyMuted}>No tasks</Text>
               )}
 
-              {open.map((item) => (
-                <TaskRow key={item.uid} item={item} onToggle={setItemStatus} />
+              {groups.map((group) => (
+                <View key={group.key} style={styles.group}>
+                  <DayDivider
+                    label={group.label}
+                    note={group.note}
+                    count={group.items.length}
+                    tone={group.overdue ? 'warn' : 'default'}
+                  />
+                  {group.items.map((item) => (
+                    <TaskRow key={item.uid} item={item} onToggle={setItemStatus} />
+                  ))}
+                </View>
               ))}
 
               {done.length > 0 && (
-                <>
-                  <ThemedText
-                    type="small"
-                    themeColor="textSecondary"
-                    style={[styles.sectionLabel, styles.doneLabel]}>
-                    Completed ({done.length})
-                  </ThemedText>
+                <View style={styles.group}>
+                  <DayDivider label="COMPLETED" count={done.length} />
                   {done.map((item) => (
                     <TaskRow key={item.uid} item={item} onToggle={setItemStatus} />
                   ))}
-                </>
+                </View>
               )}
             </ScrollView>
-          </View>
+          </Panel>
         </View>
       </SafeAreaView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.two,
-  },
-  error: {
-    color: '#e5484d',
-  },
   columns: {
     flex: 1,
     flexDirection: 'row',
-    gap: Spacing.four,
+    gap: Spacing.three,
   },
   calendarColumn: {
     flex: 1.2,
-    gap: Spacing.two,
+    gap: Spacing.three,
+  },
+  /** Panels that host a ScrollView must be bounded, not sized by their content. */
+  flexPanel: {
+    flex: 1,
   },
   tasksColumn: {
     flex: 1,
+  },
+  group: {
     gap: Spacing.two,
   },
-  tasksHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 24,
+  dayDivider: {
+    paddingTop: Spacing.one,
   },
-  sectionLabel: {
-    textTransform: 'uppercase',
+  warnText: {
+    color: Palette.warn,
   },
-  doneLabel: {
-    marginTop: Spacing.two,
-  },
-  listContent: {
-    gap: Spacing.two,
-    paddingBottom: Spacing.four,
-  },
-  eventRow: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
-  },
-  eventTime: {
-    width: 96,
-  },
-  eventBody: {
-    flex: 1,
-    gap: 2,
+  warnChip: {
+    borderColor: Palette.warn,
   },
   taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.three,
+  },
+  taskRowDone: {
+    opacity: 0.55,
   },
   checkbox: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.6,
   },
   taskText: {
     flex: 1,
@@ -355,7 +373,16 @@ const styles = StyleSheet.create({
   completed: {
     textDecorationLine: 'line-through',
   },
-  overdue: {
-    color: '#e5484d',
+  eventRow: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+    borderRadius: Radius.sm,
+  },
+  eventTime: {
+    width: 92,
+  },
+  eventBody: {
+    flex: 1,
+    gap: 2,
   },
 });

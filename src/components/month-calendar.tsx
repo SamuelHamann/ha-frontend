@@ -1,14 +1,11 @@
 import { SymbolView } from 'expo-symbols';
 import { useMemo, type ComponentProps } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { BIRTHDAY_CALENDAR_ENTITY_ID, COLLECTION_CALENDAR_ENTITY_ID } from '@/config/agenda';
-import { Spacing } from '@/constants/theme';
+import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 import type { CalendarEvent } from '@/hooks/use-agenda';
-import { useTheme } from '@/hooks/use-theme';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
@@ -140,7 +137,6 @@ export function MonthCalendar({
   onSelectDay: (key: string) => void;
   onChangeMonth: (delta: number) => void;
 }) {
-  const theme = useTheme();
   const todayKey = toDayKey(new Date());
 
   // Curbside pickups are already spoken for by the watermark icons, so they don't also earn
@@ -186,25 +182,25 @@ export function MonthCalendar({
             accessibilityRole="button"
             accessibilityLabel="Previous month"
             hitSlop={8}
-            style={({ pressed }) => pressed && styles.pressed}>
+            style={({ pressed }) => pressed && GlobalStyles.pressed}>
             <SymbolView
               name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
-              tintColor={theme.textSecondary}
+              tintColor={Palette.primary}
               size={20}
             />
           </Pressable>
-          <ThemedText type="smallBold">
-            {monthAnchor.toLocaleDateString([], { month: 'long', year: 'numeric' })}
-          </ThemedText>
+          <Text style={Type.heading}>
+            {monthAnchor.toLocaleDateString([], { month: 'long', year: 'numeric' }).toUpperCase()}
+          </Text>
           <Pressable
             onPress={() => onChangeMonth(1)}
             accessibilityRole="button"
             accessibilityLabel="Next month"
             hitSlop={8}
-            style={({ pressed }) => pressed && styles.pressed}>
+            style={({ pressed }) => pressed && GlobalStyles.pressed}>
             <SymbolView
               name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-              tintColor={theme.textSecondary}
+              tintColor={Palette.primary}
               size={20}
             />
           </Pressable>
@@ -212,9 +208,9 @@ export function MonthCalendar({
 
         <View style={styles.weekRow}>
           {WEEKDAYS.map((w) => (
-            <ThemedText key={w} type="code" themeColor="textSecondary" style={styles.weekday}>
-              {w}
-            </ThemedText>
+            <Text key={w} style={[Type.label, styles.weekday]}>
+              {w.toUpperCase()}
+            </Text>
           ))}
         </View>
 
@@ -240,11 +236,11 @@ export function MonthCalendar({
                     accessibilityLabel={[d.toDateString(), ...dayBadges].join(', ')}
                     accessibilityState={{ selected: isSelected }}
                     style={styles.dayCell}>
-                    <ThemedView
-                      type={isSelected ? 'backgroundSelected' : 'background'}
+                    <View
                       style={[
                         styles.dayInner,
-                        isToday && { borderColor: '#3c87f7', borderWidth: 1.5 },
+                        isSelected && styles.daySelected,
+                        isToday && styles.dayToday,
                       ]}>
                       {dayBadges.length > 0 && (
                         <View
@@ -254,25 +250,27 @@ export function MonthCalendar({
                             <SymbolView
                               key={badge}
                               name={BADGE_ICONS[badge]}
-                              tintColor={theme.textSecondary}
+                              tintColor={Palette.textMuted}
                               size={badgeSize}
                             />
                           ))}
                         </View>
                       )}
-                      <ThemedText
-                        type={isToday ? 'smallBold' : 'small'}
-                        themeColor={inMonth ? 'text' : 'textSecondary'}
-                        style={!inMonth && styles.outsideMonth}>
+                      <Text
+                        style={[
+                          Type.body,
+                          !inMonth && styles.outsideMonth,
+                          isToday && styles.todayText,
+                        ]}>
                         {d.getDate()}
-                      </ThemedText>
+                      </Text>
                       <View style={styles.dotRow}>
                         {count > 0 &&
                           Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                            <View key={i} style={[styles.dot, { backgroundColor: theme.text }]} />
+                            <View key={i} style={styles.dot} />
                           ))}
                       </View>
-                    </ThemedView>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -293,9 +291,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.two,
-  },
-  pressed: {
-    opacity: 0.6,
   },
   weekRow: {
     flexDirection: 'row',
@@ -319,14 +314,28 @@ const styles = StyleSheet.create({
   },
   dayInner: {
     flex: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: Palette.panelDeep,
     alignItems: 'center',
     // Date pinned to the top, event dots to the bottom, watermark centred behind both.
     justifyContent: 'space-between',
     paddingVertical: 3,
   },
+  daySelected: {
+    backgroundColor: Palette.panelActive,
+    borderColor: Palette.primary,
+  },
+  dayToday: {
+    borderColor: Palette.secondary,
+  },
+  todayText: {
+    color: Palette.secondary,
+    fontWeight: '700',
+  },
   outsideMonth: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
   /**
    * Sits behind the date and the event dots: absolutely filling the cell keeps it out of the
@@ -360,5 +369,6 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
+    backgroundColor: Palette.primary,
   },
 });
