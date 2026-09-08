@@ -36,6 +36,22 @@ export const DEVICE_IDS = {
   thermostatGym: 'fb8229a8861a821d849458079a8b1025',
   thermostatBar: 'b7e78385cd8b27eb5adf2e8c58ef94a7',
   thermostatLaundry: 'b1984623323adde698d00ffded31a332',
+
+  /**
+   * Main light per room. Some are multi-gang wall switches carrying several entities, so
+   * ROOMS in `@/config/home` also records which gang is the room's main light.
+   */
+  lightLivingRoom: 'a7ea7b89132fc97b7073cc48b5ce06ea',
+  lightBedroom: '7d78233b14f780c3c3e12bfc7d4d4598',
+  lightOffice: '0e1fab46832a1056f600db4c7f3c82f5',
+  lightGym: '9d6e609f68eaf0f76166fe22425a3c9a',
+  lightBasement: '3d8552c0d5cfcf0c44fc6e8598cfdcf8',
+  lightLaundry: 'e36895a9c2974abd3726047091293f83',
+
+  /** Colour bulbs and outlets exposed in the room modals. */
+  bulbBedsideLeft: '3e30ef859bf937ae97aba54b7946b929',
+  bulbBedsideRight: '1cbbff8a65358f0c9d8e91c77d5285a4',
+  outletOfficeDesk: '8019b4509cdb1fefbcff801badaf0faf',
 } as const;
 
 export const WATCHED_DEVICES: WatchedDevice[] = [
@@ -51,4 +67,13 @@ export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.thermostatGym, label: 'Thermostat — Gym' },
   { id: DEVICE_IDS.thermostatBar, label: 'Thermostat — Bar' },
   { id: DEVICE_IDS.thermostatLaundry, label: 'Thermostat — Laundry' },
+  { id: DEVICE_IDS.lightLivingRoom, label: 'Light — Living Room' },
+  { id: DEVICE_IDS.lightBedroom, label: 'Light — Bedroom' },
+  { id: DEVICE_IDS.lightOffice, label: 'Light — Office' },
+  { id: DEVICE_IDS.lightGym, label: 'Light — Gym' },
+  { id: DEVICE_IDS.lightBasement, label: 'Light — Basement' },
+  { id: DEVICE_IDS.lightLaundry, label: 'Light — Laundry' },
+  { id: DEVICE_IDS.bulbBedsideLeft, label: 'Bulb — Bedside left' },
+  { id: DEVICE_IDS.bulbBedsideRight, label: 'Bulb — Bedside right' },
+  { id: DEVICE_IDS.outletOfficeDesk, label: 'Outlet — Office desk' },
 ];

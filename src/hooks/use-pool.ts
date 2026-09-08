@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { DEVICE_IDS } from '@/config/devices';
 import { POOL_PUMP_SWITCH_SUFFIX } from '@/config/home';
@@ -13,9 +13,9 @@ export type PumpStatus = 'running' | 'off' | 'unknown';
  * plug has two outlets, so the pump is picked by `POOL_PUMP_SWITCH_SUFFIX`.
  */
 export function usePool() {
-  const { devices } = useHomeAssistantContext();
+  const { devices, sendCommand } = useHomeAssistantContext();
 
-  return useMemo(() => {
+  const pool = useMemo(() => {
     const plug = devices.find((d) => d.id === DEVICE_IDS.poolPlug);
     const pump =
       plug?.entities.find(
@@ -44,9 +44,23 @@ export function usePool() {
 
     return {
       status,
+      pumpEntityId: pump?.entityId ?? null,
       temperature: fahrenheit,
       temperatureUnit: '°F',
       lastChanged: pump?.lastChanged ?? null,
     };
   }, [devices]);
+
+  /** Starts or stops the pump. The new state arrives over the existing subscription. */
+  const togglePump = useCallback(async () => {
+    if (!pool.pumpEntityId) return;
+    await sendCommand({
+      type: 'call_service',
+      domain: pool.pumpEntityId.split('.')[0],
+      service: 'toggle',
+      target: { entity_id: pool.pumpEntityId },
+    });
+  }, [sendCommand, pool.pumpEntityId]);
+
+  return { ...pool, togglePump };
 }

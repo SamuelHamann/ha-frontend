@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -14,7 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionNotice } from '@/components/connection-notice';
 import { Panel } from '@/components/panel';
+import { PowerModal } from '@/components/power-modal';
 import { PulseGlow } from '@/components/pulse-glow';
+import { RoomCard } from '@/components/room-card';
+import { RoomModal } from '@/components/room-modal';
 import { Spin } from '@/components/spin';
 import { Wave } from '@/components/wave';
 import { ThermostatCard } from '@/components/thermostat-card';
@@ -22,12 +25,16 @@ import {
   AC_PLACEHOLDER,
   FORECAST_SNAPSHOT_HOURS,
   FORECAST_SNAPSHOT_STEP_HOURS,
+  OUTDOOR_ROOM,
+  ROOMS,
+  type Room,
 } from '@/config/home';
 import { SWIPE_DISTANCE, SWIPE_SLOP, SWIPE_VELOCITY } from '@/constants/gestures';
 import { GlobalStyles, Palette, Spacing, Type } from '@/constants/styles';
 import { conditionIcon, conditionLabel } from '@/constants/weather-icons';
 import { useHaTime, type ClockSource, type HaClock } from '@/hooks/use-ha-time';
 import { usePool, type PumpStatus } from '@/hooks/use-pool';
+import { useRoomLights, type RoomLightState } from '@/hooks/use-room-lights';
 import { usePower } from '@/hooks/use-power';
 import { useThermostats } from '@/hooks/use-thermostats';
 import { useWeather, type ForecastEntry } from '@/hooks/use-weather';
@@ -379,9 +386,11 @@ function WeatherPanel({ now }: { now: Date }) {
 
 function PowerPanel({ clock }: { clock: HaClock }) {
   const { watts, unit, lastChanged, kwhToday } = usePower();
+  const [open, setOpen] = useState(false);
 
   return (
     <Panel style={styles.powerPanel}>
+      <PowerModal visible={open} onClose={() => setOpen(false)} />
       <View style={GlobalStyles.spread}>
         <Text style={Type.label}>POWER</Text>
         {!!lastChanged && (
@@ -395,29 +404,35 @@ function PowerPanel({ clock }: { clock: HaClock }) {
         )}
       </View>
 
-      <View style={styles.powerRow}>
-        <SymbolView
-          name={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
-          tintColor={Palette.warn}
-          size={30}
-        />
-        <Text style={Type.readout}>
-          {watts === null ? '—' : Math.round(watts).toLocaleString()}
-        </Text>
-        <Text style={Type.mono}>{unit}</Text>
-      </View>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Power history"
+        style={({ pressed }) => [styles.powerBody, pressed && GlobalStyles.pressed]}>
+        <View style={styles.powerRow}>
+          <SymbolView
+            name={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
+            tintColor={Palette.warn}
+            size={30}
+          />
+          <Text style={Type.readout}>
+            {watts === null ? '—' : Math.round(watts).toLocaleString()}
+          </Text>
+          <Text style={Type.mono}>{unit}</Text>
+        </View>
 
-      <View style={GlobalStyles.divider}>
-        <Text style={Type.label}>TODAY</Text>
-        <View style={GlobalStyles.dividerRule} />
-      </View>
+        <View style={GlobalStyles.divider}>
+          <Text style={Type.label}>TODAY</Text>
+          <View style={GlobalStyles.dividerRule} />
+        </View>
 
-      <View style={styles.powerRow}>
-        <Text style={[Type.readout, styles.energyValue]}>
-          {kwhToday === null ? '—' : kwhToday.toFixed(1)}
-        </Text>
-        <Text style={Type.mono}>kWh</Text>
-      </View>
+        <View style={styles.powerRow}>
+          <Text style={[Type.readout, styles.energyValue]}>
+            {kwhToday === null ? '—' : kwhToday.toFixed(1)}
+          </Text>
+          <Text style={Type.mono}>kWh</Text>
+        </View>
+      </Pressable>
     </Panel>
   );
 }
@@ -429,8 +444,21 @@ const PUMP_LABEL: Record<PumpStatus, string> = {
 };
 
 function PoolPanel() {
-  const { status, temperature, temperatureUnit } = usePool();
+  const { status, temperature, temperatureUnit, pumpEntityId, togglePump } = usePool();
   const running = status === 'running';
+  const [pending, setPending] = useState(false);
+
+  const press = async () => {
+    if (pending || !pumpEntityId) return;
+    setPending(true);
+    try {
+      await togglePump();
+    } catch {
+      // The card reflects entity state, so a failure leaves it where it was.
+    } finally {
+      setPending(false);
+    }
+  };
 
   const pumpIcon = (
     <SymbolView
@@ -445,44 +473,57 @@ function PoolPanel() {
       {/* Rendered first so the water sits behind the readings; flat while the pump is off. */}
       <Wave color={Palette.secondary} still={!running} />
 
-      <Text style={Type.label}>POOL</Text>
+      {/* Tapping the card starts or stops the pump. */}
+      <Pressable
+        onPress={press}
+        disabled={pending || !pumpEntityId}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: running, disabled: !pumpEntityId }}
+        accessibilityLabel="Pool pump"
+        style={({ pressed }) => [styles.poolBody, pressed && GlobalStyles.pressed]}>
+        <Text style={Type.label}>POOL</Text>
 
-      <View style={GlobalStyles.spread}>
-        <View style={styles.poolRow}>
-          {running ? <Spin>{pumpIcon}</Spin> : pumpIcon}
-          <Text style={Type.mono}>PUMP</Text>
+        <View style={GlobalStyles.spread}>
+          <View style={styles.poolRow}>
+            {running ? <Spin>{pumpIcon}</Spin> : pumpIcon}
+            <Text style={Type.mono}>PUMP</Text>
+          </View>
+          <View style={styles.poolRow}>
+            {pending ? (
+              <ActivityIndicator size="small" color={Palette.textMuted} />
+            ) : (
+              <View
+                style={[
+                  GlobalStyles.led,
+                  running && styles.ledOn,
+                  status === 'unknown' && styles.ledWarn,
+                ]}
+              />
+            )}
+            <Text style={[Type.monoBright, status === 'unknown' && styles.warnText]}>
+              {PUMP_LABEL[status]}
+            </Text>
+          </View>
         </View>
-        <View style={styles.poolRow}>
-          <View
-            style={[
-              GlobalStyles.led,
-              running && styles.ledOn,
-              status === 'unknown' && styles.ledWarn,
-            ]}
-          />
-          <Text style={[Type.monoBright, status === 'unknown' && styles.warnText]}>
-            {PUMP_LABEL[status]}
+
+        <View style={GlobalStyles.spread}>
+          <View style={styles.poolRow}>
+            <SymbolView
+              name={{
+                ios: 'thermometer.medium',
+                android: 'thermostat',
+                web: 'thermostat',
+              }}
+              tintColor={Palette.secondary}
+              size={18}
+            />
+            <Text style={Type.mono}>WATER</Text>
+          </View>
+          <Text style={[Type.readout, styles.poolTemp]}>
+            {temperature === null ? '—' : `${temperature.toFixed(1)}${temperatureUnit}`}
           </Text>
         </View>
-      </View>
-
-      <View style={GlobalStyles.spread}>
-        <View style={styles.poolRow}>
-          <SymbolView
-            name={{
-              ios: 'thermometer.medium',
-              android: 'thermostat',
-              web: 'thermostat',
-            }}
-            tintColor={Palette.secondary}
-            size={18}
-          />
-          <Text style={Type.mono}>WATER</Text>
-        </View>
-        <Text style={[Type.readout, styles.poolTemp]}>
-          {temperature === null ? '—' : `${temperature.toFixed(1)}${temperatureUnit}`}
-        </Text>
-      </View>
+      </Pressable>
     </Panel>
   );
 }
@@ -567,6 +608,38 @@ function AcPanel() {
   );
 }
 
+const NO_LIGHT: RoomLightState = { entityId: null, on: false, unavailable: false };
+
+/** Rooms two per row, with Outdoor spanning the full width beneath them. */
+function RoomsGrid() {
+  const allRooms = useMemo(() => [...ROOMS, OUTDOOR_ROOM], []);
+  const { states, toggle } = useRoomLights(allRooms);
+  const [openRoom, setOpenRoom] = useState<Room | null>(null);
+
+  return (
+    <View style={styles.roomGrid}>
+      {ROOMS.map((room) => (
+        <RoomCard
+          key={room.name}
+          room={room}
+          light={states.get(room.name) ?? NO_LIGHT}
+          onToggle={toggle}
+          onOpen={setOpenRoom}
+        />
+      ))}
+      <RoomCard
+        room={OUTDOOR_ROOM}
+        light={states.get(OUTDOOR_ROOM.name) ?? NO_LIGHT}
+        onToggle={toggle}
+        onOpen={setOpenRoom}
+        fullWidth
+      />
+
+      <RoomModal room={openRoom} visible={!!openRoom} onClose={() => setOpenRoom(null)} />
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const { status, error } = useHomeAssistantContext();
   const clock = useHaTime();
@@ -592,15 +665,19 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* Top-right pool readout, with the room thermostats beneath it. */}
-          <View style={styles.mainColumn}>
-            {connected && (
-              <>
-                <PoolPanel />
-                <ThermostatsPanel />
-                <AcPanel />
-              </>
-            )}
+          {/* The remaining two thirds: room cards in the centre, readouts pinned right. */}
+          <View style={styles.mainArea}>
+            <View style={styles.centerColumn}>{connected && <RoomsGrid />}</View>
+
+            <View style={styles.rightColumn}>
+              {connected && (
+                <>
+                  <PoolPanel />
+                  <ThermostatsPanel />
+                  <AcPanel />
+                </>
+              )}
+            </View>
           </View>
         </View>
       </SafeAreaView>
@@ -619,9 +696,23 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.three,
   },
-  mainColumn: {
+  /** Keeps the left column at exactly a third; the centre takes whatever the fixed-width
+   * right-hand stack leaves. */
+  mainArea: {
     flex: 2,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: Spacing.three,
+  },
+  centerColumn: {
+    flex: 1,
+  },
+  rightColumn: {
+    width: SIDE_CARD_WIDTH,
+    gap: Spacing.three,
+  },
+  roomGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.three,
   },
   thermostatPanel: {
@@ -657,6 +748,9 @@ const styles = StyleSheet.create({
   },
   poolPanel: {
     width: SIDE_CARD_WIDTH,
+    gap: Spacing.two,
+  },
+  poolBody: {
     gap: Spacing.two,
   },
   poolRow: {
@@ -745,6 +839,9 @@ const styles = StyleSheet.create({
   },
   rainWet: {
     color: Palette.secondary,
+  },
+  powerBody: {
+    gap: Spacing.two,
   },
   powerRow: {
     flexDirection: 'row',

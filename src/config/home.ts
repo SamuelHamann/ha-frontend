@@ -4,6 +4,8 @@
  * The hardware itself lives in `@/config/devices` as device ids; this file only says how the
  * Home page arranges and labels it.
  */
+import type { SymbolViewProps } from 'expo-symbols';
+
 import { DEVICE_IDS } from '@/config/devices';
 
 /**
@@ -39,6 +41,145 @@ export const HA_TIME_ENTITY_IDS = {
   date: 'sensor.date',
   time: 'sensor.time',
 } as const;
+
+export interface RoomLight {
+  deviceId: string;
+  /**
+   * Which switch on the device is the room's main light, for multi-gang wall switches.
+   * Gangs are ordered by entity id, so 0 is the first switch and 1 the second.
+   */
+  gang: number;
+}
+
+/** One device row inside a room's modal. */
+export type RoomControl =
+  /** A gang of a wall switch. `readOnly` renders the state but refuses to change it. */
+  | { kind: 'switch'; label: string; deviceId: string; gang: number; readOnly?: boolean }
+  | { kind: 'outlet'; label: string; deviceId: string; gang?: number }
+  /** A colour bulb: on/off, intensity, colour temperature and preset colours. */
+  | { kind: 'bulb'; label: string; deviceId: string }
+  | { kind: 'thermostat'; label: string; deviceId: string }
+  | { kind: 'poolPump'; label: string }
+  /** Bar chart of a sensor's recent history. */
+  | { kind: 'history'; label: string; deviceId: string; deviceClass: string; hours: number };
+
+export interface Room {
+  name: string;
+  icon: SymbolViewProps['name'];
+  /** Absent when the room has no controllable light — the card shows a dead button. */
+  light?: RoomLight;
+  /** Devices listed in the room's modal. Empty means a placeholder modal. */
+  controls: RoomControl[];
+}
+
+/**
+ * The room cards in the centre of the Home page, two per row in this order.
+ *
+ * Rooms without a `light` render a placeholder button; nothing on this instance controls the
+ * Kitchen or Stairs lights yet.
+ */
+export const ROOMS: Room[] = [
+  {
+    name: 'Living Room',
+    icon: { ios: 'sofa.fill', android: 'weekend', web: 'weekend' },
+    light: { deviceId: DEVICE_IDS.lightLivingRoom, gang: 0 },
+    controls: [
+      { kind: 'bulb', label: 'Bubble light', deviceId: DEVICE_IDS.lightLivingRoom },
+      { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatLivingRoom },
+    ],
+  },
+  {
+    name: 'Kitchen',
+    icon: { ios: 'refrigerator.fill', android: 'kitchen', web: 'kitchen' },
+    controls: [{ kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatKitchen }],
+  },
+  {
+    name: 'Bedroom',
+    icon: { ios: 'bed.double.fill', android: 'bed', web: 'bed' },
+    // The main light is the second gang of the wall switch.
+    light: { deviceId: DEVICE_IDS.lightBedroom, gang: 1 },
+    controls: [
+      // The first gang feeds the bedside lamps, so it has to stay on.
+      {
+        kind: 'switch',
+        label: 'Main power',
+        deviceId: DEVICE_IDS.lightBedroom,
+        gang: 0,
+        readOnly: true,
+      },
+      { kind: 'switch', label: 'Light fixture', deviceId: DEVICE_IDS.lightBedroom, gang: 1 },
+      { kind: 'bulb', label: 'Bedside left', deviceId: DEVICE_IDS.bulbBedsideLeft },
+      { kind: 'bulb', label: 'Bedside right', deviceId: DEVICE_IDS.bulbBedsideRight },
+      { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatBedroom },
+    ],
+  },
+  {
+    name: 'Office',
+    icon: { ios: 'desktopcomputer', android: 'desk', web: 'desk' },
+    light: { deviceId: DEVICE_IDS.lightOffice, gang: 0 },
+    controls: [
+      { kind: 'outlet', label: 'Wall outlet', deviceId: DEVICE_IDS.outletOfficeDesk },
+      { kind: 'bulb', label: 'Mushroom lamp', deviceId: DEVICE_IDS.lightOffice },
+      { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatOffice },
+    ],
+  },
+  {
+    name: 'Gym',
+    icon: { ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' },
+    light: { deviceId: DEVICE_IDS.lightGym, gang: 0 },
+    controls: [
+      // The presence automation drives the left gang, so that is the main light.
+      { kind: 'switch', label: 'Main light', deviceId: DEVICE_IDS.lightGym, gang: 0 },
+      { kind: 'switch', label: 'Accent light', deviceId: DEVICE_IDS.lightGym, gang: 1 },
+      { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatGym },
+    ],
+  },
+  {
+    name: 'Basement',
+    icon: { ios: 'wineglass.fill', android: 'wine_bar', web: 'wine_bar' },
+    // The main light is the first gang of the wall switch.
+    light: { deviceId: DEVICE_IDS.lightBasement, gang: 0 },
+    controls: [
+      { kind: 'switch', label: 'Main light', deviceId: DEVICE_IDS.lightBasement, gang: 0 },
+      { kind: 'switch', label: 'Accent light', deviceId: DEVICE_IDS.lightBasement, gang: 1 },
+      { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatBar },
+    ],
+  },
+  {
+    name: 'Laundry',
+    icon: { ios: 'washer.fill', android: 'local_laundry_service', web: 'local_laundry_service' },
+    light: { deviceId: DEVICE_IDS.lightLaundry, gang: 0 },
+    controls: [
+      { kind: 'switch', label: 'Main light', deviceId: DEVICE_IDS.lightLaundry, gang: 0 },
+      { kind: 'thermostat', label: 'Thermostat', deviceId: DEVICE_IDS.thermostatLaundry },
+    ],
+  },
+  {
+    name: 'Stairs',
+    icon: { ios: 'stairs', android: 'stairs', web: 'stairs' },
+    controls: [],
+  },
+];
+
+/** Rendered full width beneath the room grid. No outdoor light is wired up yet. */
+export const OUTDOOR_ROOM: Room = {
+  name: 'Outdoor',
+  icon: { ios: 'tree.fill', android: 'park', web: 'park' },
+  controls: [
+    { kind: 'poolPump', label: 'Pool pump' },
+    {
+      kind: 'history',
+      label: 'Garden humidity · 12h',
+      deviceId: DEVICE_IDS.gardenSoilSensor,
+      deviceClass: 'moisture',
+      hours: 12,
+    },
+  ],
+};
+
+/** Statistic behind the 7-day chart in the power modal — the whole-house energy total. */
+export const ENERGY_STATISTIC_ID = 'sensor.hilo_energy_total';
+export const ENERGY_HISTORY_DAYS = 7;
 
 /**
  * Stand-in readings for the A/C card.
