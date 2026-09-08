@@ -54,12 +54,21 @@ const ThermostatView = memo(function ThermostatView({
   const [target, requestTarget, waiting] = useOptimistic(reported ?? 0);
 
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (commitTimer.current) clearTimeout(commitTimer.current);
-    },
-    [],
-  );
+  /** The send that the debounce is sitting on, so it can be flushed early. */
+  const queued = useRef<(() => void) | null>(null);
+
+  const flush = () => {
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = null;
+    const send = queued.current;
+    queued.current = null;
+    send?.();
+  };
+
+  // Closing the modal unmounts this control. Dropping the timer here would throw away a
+  // setpoint the user had already tapped in, so the pending send is fired instead of
+  // cancelled — the socket lives in the provider above, and outlives this component.
+  useEffect(() => () => flush(), []);
 
   const nudge = (delta: number) => {
     if (!entity || missing || reported === null) return;
@@ -68,21 +77,23 @@ const ThermostatView = memo(function ThermostatView({
     requestTarget(next);
 
     // Send only the value the user settled on.
-    if (commitTimer.current) clearTimeout(commitTimer.current);
-    commitTimer.current = setTimeout(() => {
+    queued.current = () => {
       callService('climate', 'set_temperature', entity.entityId, { temperature: next }).catch(
         () => {
           // The override times out on its own, putting the reported setpoint back.
         },
       );
-    }, COMMIT_DELAY_MS);
+    };
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(flush, COMMIT_DELAY_MS);
   };
 
   return (
     <ControlShell
       label={label}
       status={missing ? 'UNAVAILABLE' : waiting ? 'SETTING…' : heating ? 'HEATING' : 'IDLE'}
-      statusTone={missing ? 'warn' : heating ? 'on' : 'muted'}>
+      statusTone={missing ? 'warn' : heating ? 'on' : 'muted'}
+    >
       {heating && <PulseGlow color={Palette.warn} />}
 
       <View style={styles.row}>
@@ -107,7 +118,8 @@ const ThermostatView = memo(function ThermostatView({
             disabled={missing}
             accessibilityRole="button"
             accessibilityLabel={`${label} cooler`}
-            style={({ pressed }) => [styles.stepper, pressed && GlobalStyles.pressed]}>
+            style={({ pressed }) => [styles.stepper, pressed && GlobalStyles.pressed]}
+          >
             <Text style={styles.stepperGlyph}>−</Text>
           </Pressable>
           <Pressable
@@ -115,7 +127,8 @@ const ThermostatView = memo(function ThermostatView({
             disabled={missing}
             accessibilityRole="button"
             accessibilityLabel={`${label} warmer`}
-            style={({ pressed }) => [styles.stepper, pressed && GlobalStyles.pressed]}>
+            style={({ pressed }) => [styles.stepper, pressed && GlobalStyles.pressed]}
+          >
             <Text style={styles.stepperGlyph}>+</Text>
           </Pressable>
         </View>

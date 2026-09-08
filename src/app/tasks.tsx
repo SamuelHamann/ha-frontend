@@ -8,6 +8,7 @@ import { MonthCalendar, eventDayKeys, toDayKey } from '@/components/month-calend
 import { Panel } from '@/components/panel';
 import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 import { useAgenda, type CalendarEvent, type TodoItem } from '@/hooks/use-agenda';
+import { useHaTime } from '@/hooks/use-ha-time';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
 function isAllDay(event: CalendarEvent) {
@@ -53,9 +54,12 @@ interface TaskGroup {
  * Split the open tasks into one group per due day, oldest first, with undated tasks last.
  * Each group's label carries the weekday plus the day and month, which is what the divider
  * in the list renders.
+ *
+ * `now` is passed in rather than read here so OVERDUE/TODAY/TOMORROW follow the same Home
+ * Assistant clock as the rest of the page.
  */
-function groupByDay(items: TodoItem[]): TaskGroup[] {
-  const today = startOfDay(new Date());
+function groupByDay(items: TodoItem[], now: Date): TaskGroup[] {
+  const today = startOfDay(now);
   const byKey = new Map<string, { date: Date | null; items: TodoItem[] }>();
 
   for (const item of items) {
@@ -66,33 +70,47 @@ function groupByDay(items: TodoItem[]): TaskGroup[] {
     byKey.set(key, group);
   }
 
-  return [...byKey.entries()]
-    // Undated tasks sort to the bottom; everything else runs oldest to newest.
-    .sort(([, ga], [, gb]) => {
-      if (!ga.date) return 1;
-      if (!gb.date) return -1;
-      return ga.date.getTime() - gb.date.getTime();
-    })
-    .map(([key, group]) => {
-      if (!group.date) {
-        return { key: 'undated', label: 'NO DUE DATE', note: null, overdue: false, items: group.items };
-      }
-      const dayDiff = Math.round((group.date.getTime() - today.getTime()) / 86400000);
-      const note = dayDiff < 0 ? 'OVERDUE' : dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : null;
-      return {
-        key,
-        label: group.date
-          .toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
-          .toUpperCase(),
-        note,
-        overdue: dayDiff < 0,
-        items: group.items,
-      };
-    });
+  return (
+    [...byKey.entries()]
+      // Undated tasks sort to the bottom; everything else runs oldest to newest.
+      .sort(([, ga], [, gb]) => {
+        if (!ga.date) return 1;
+        if (!gb.date) return -1;
+        return ga.date.getTime() - gb.date.getTime();
+      })
+      .map(([key, group]) => {
+        if (!group.date) {
+          return {
+            key: 'undated',
+            label: 'NO DUE DATE',
+            note: null,
+            overdue: false,
+            items: group.items,
+          };
+        }
+        const dayDiff = Math.round((group.date.getTime() - today.getTime()) / 86400000);
+        const note =
+          dayDiff < 0 ? 'OVERDUE' : dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : null;
+        return {
+          key,
+          label: group.date
+            .toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
+            .toUpperCase(),
+          note,
+          overdue: dayDiff < 0,
+          items: group.items,
+        };
+      })
+  );
 }
 
 /** Label + hairline rule; the list's day separator. */
-function DayDivider({ label, note, count, tone }: {
+function DayDivider({
+  label,
+  note,
+  count,
+  tone,
+}: {
   label: string;
   note?: string | null;
   count?: number;
@@ -149,7 +167,8 @@ function TaskRow({
         styles.taskRow,
         done && styles.taskRowDone,
         pressed && GlobalStyles.pressed,
-      ]}>
+      ]}
+    >
       <View style={styles.checkbox}>
         {pending ? (
           <ActivityIndicator size="small" color={Palette.textMuted} />
@@ -158,7 +177,11 @@ function TaskRow({
             name={
               done
                 ? { ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }
-                : { ios: 'circle', android: 'radio_button_unchecked', web: 'radio_button_unchecked' }
+                : {
+                    ios: 'circle',
+                    android: 'radio_button_unchecked',
+                    web: 'radio_button_unchecked',
+                  }
             }
             tintColor={done ? Palette.textMuted : Palette.primary}
             size={20}
@@ -180,8 +203,35 @@ function TaskRow({
 
 export default function TasksScreen() {
   const { status, error: connectionError } = useHomeAssistantContext();
-  const [monthAnchor, setMonthAnchor] = useState(() => new Date());
-  const [selectedKey, setSelectedKey] = useState(() => toDayKey(new Date()));
+
+  // The panel runs for days at a time, so today can't be captured once at mount — it comes
+  // from the Home Assistant clock and is re-derived on every tick.
+  const { now } = useHaTime();
+  const todayKey = toDayKey(now);
+  const currentMonthKey = `${now.getFullYear()}-${now.getMonth()}`;
+
+  // A tap pins a day, but only for the rest of that day: each pin records the day it was
+  // made on, so once the date rolls over the page snaps back to the new today by itself.
+  const [pinnedDay, setPinnedDay] = useState<{ key: string; madeOn: string } | null>(null);
+  const [pinnedMonth, setPinnedMonth] = useState<{ key: string; madeOn: string } | null>(null);
+
+  const selectedKey = pinnedDay?.madeOn === todayKey ? pinnedDay.key : todayKey;
+  const monthKey = pinnedMonth?.madeOn === todayKey ? pinnedMonth.key : currentMonthKey;
+
+  // Derived from the month key rather than from `now`, so a fresh Date every minute doesn't
+  // invalidate the fetch range below and re-request the whole month.
+  const monthAnchor = useMemo(() => {
+    const [year, month] = monthKey.split('-').map(Number);
+    return new Date(year, month, 1);
+  }, [monthKey]);
+
+  // Stamped with the Home Assistant day, not the device's: they are compared against
+  // `todayKey`, and on a tablet whose own clock is wrong a device-stamped pin would never
+  // match and would be discarded the instant it was made.
+  const selectDay = useCallback(
+    (key: string) => setPinnedDay({ key, madeOn: todayKey }),
+    [todayKey],
+  );
 
   // Fetch a little beyond the visible grid so events from adjacent months still show.
   const { monthStart, monthEnd } = useMemo(() => {
@@ -199,9 +249,14 @@ export default function TasksScreen() {
 
   // Stable identity: MonthCalendar builds its swipe gesture from this, and a fresh callback
   // every render would rebuild the gesture every render too.
-  const changeMonth = useCallback((delta: number) => {
-    setMonthAnchor((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
-  }, []);
+  const changeMonth = useCallback(
+    (delta: number) => {
+      const [year, month] = monthKey.split('-').map(Number);
+      const next = new Date(year, month + delta, 1);
+      setPinnedMonth({ key: `${next.getFullYear()}-${next.getMonth()}`, madeOn: todayKey });
+    },
+    [monthKey, todayKey],
+  );
 
   const selectedEvents = useMemo(
     () => events.filter((e) => eventDayKeys(e).includes(selectedKey)),
@@ -213,9 +268,9 @@ export default function TasksScreen() {
     return {
       open: openItems,
       done: items.filter((i) => i.status === 'completed'),
-      groups: groupByDay(openItems),
+      groups: groupByDay(openItems, now),
     };
-  }, [items]);
+  }, [items, now]);
 
   if (!connected) {
     return (
@@ -243,7 +298,8 @@ export default function TasksScreen() {
                 monthAnchor={monthAnchor}
                 events={events}
                 selectedKey={selectedKey}
-                onSelectDay={setSelectedKey}
+                onSelectDay={selectDay}
+                todayKey={todayKey}
                 onChangeMonth={changeMonth}
               />
             </Panel>
@@ -257,7 +313,8 @@ export default function TasksScreen() {
               />
               <ScrollView
                 contentContainerStyle={GlobalStyles.listContent}
-                showsVerticalScrollIndicator={false}>
+                showsVerticalScrollIndicator={false}
+              >
                 {selectedEvents.length === 0 ? (
                   <Text style={Type.bodyMuted}>No events</Text>
                 ) : (
@@ -288,7 +345,8 @@ export default function TasksScreen() {
 
             <ScrollView
               contentContainerStyle={GlobalStyles.listContent}
-              showsVerticalScrollIndicator={false}>
+              showsVerticalScrollIndicator={false}
+            >
               {open.length === 0 && done.length === 0 && !todosLoading && (
                 <Text style={Type.bodyMuted}>No tasks</Text>
               )}

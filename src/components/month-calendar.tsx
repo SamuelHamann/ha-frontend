@@ -123,17 +123,19 @@ export function MonthCalendar({
   monthAnchor,
   events,
   selectedKey,
+  todayKey,
   onSelectDay,
   onChangeMonth,
 }: {
   monthAnchor: Date;
   events: CalendarEvent[];
   selectedKey: string;
+  /** Which day to ring as today. Passed in so it tracks the Home Assistant clock rather
+   * than being captured from the device at render time. */
+  todayKey: string;
   onSelectDay: (key: string) => void;
   onChangeMonth: (delta: number) => void;
 }) {
-  const todayKey = toDayKey(new Date());
-
   // Curbside pickups are already spoken for by the watermark icons, so they don't also earn
   // a dot — otherwise every Friday reads as a busy day.
   const countByDay = new Map<string, number>();
@@ -177,7 +179,8 @@ export function MonthCalendar({
             accessibilityRole="button"
             accessibilityLabel="Previous month"
             hitSlop={8}
-            style={({ pressed }) => pressed && GlobalStyles.pressed}>
+            style={({ pressed }) => pressed && GlobalStyles.pressed}
+          >
             <SymbolView
               name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
               tintColor={Palette.primary}
@@ -192,7 +195,8 @@ export function MonthCalendar({
             accessibilityRole="button"
             accessibilityLabel="Next month"
             hitSlop={8}
-            style={({ pressed }) => pressed && GlobalStyles.pressed}>
+            style={({ pressed }) => pressed && GlobalStyles.pressed}
+          >
             <SymbolView
               name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
               tintColor={Palette.primary}
@@ -230,17 +234,20 @@ export function MonthCalendar({
                     accessibilityRole="button"
                     accessibilityLabel={[d.toDateString(), ...dayBadges].join(', ')}
                     accessibilityState={{ selected: isSelected }}
-                    style={styles.dayCell}>
+                    style={styles.dayCell}
+                  >
                     <View
                       style={[
                         styles.dayInner,
                         isSelected && styles.daySelected,
                         isToday && styles.dayToday,
-                      ]}>
+                      ]}
+                    >
                       {dayBadges.length > 0 && (
                         <View
                           style={[styles.badgeLayer, !inMonth && styles.badgeLayerOutside]}
-                          pointerEvents="none">
+                          pointerEvents="none"
+                        >
                           {dayBadges.map((badge) => (
                             <SymbolView
                               key={badge}
@@ -256,7 +263,8 @@ export function MonthCalendar({
                           Type.body,
                           !inMonth && styles.outsideMonth,
                           isToday && styles.todayText,
-                        ]}>
+                        ]}
+                      >
                         {d.getDate()}
                       </Text>
                       <View style={styles.dotRow}>

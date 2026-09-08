@@ -6,6 +6,7 @@ import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 export interface Thermostat {
   /** Fixed display name from the config, not HA's area name. */
   name: string;
+  deviceId: string;
   /** Current room temperature in °C, or null when the entity hasn't reported yet. */
   current: number | null;
   /** Target temperature in °C. */
@@ -39,6 +40,7 @@ export function useThermostats(): Thermostat[] {
 
         return {
           name,
+          deviceId,
           current: toNumber(attributes.current_temperature),
           target: toNumber(attributes.temperature),
           // `hvac_action` is what the unit is doing now; the state only says which mode it

@@ -3,8 +3,10 @@
  * warm glow pulses behind it — the only motion on the panel, so an active radiator reads at
  * a glance.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import type { AnchorRect } from '@/components/modal-sheet';
 import { PulseGlow } from '@/components/pulse-glow';
 import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 import type { Thermostat } from '@/hooks/use-thermostats';
@@ -13,11 +15,37 @@ function round(value: number | null) {
   return value === null ? '—' : value.toFixed(1);
 }
 
-export function ThermostatCard({ thermostat }: { thermostat: Thermostat }) {
+export function ThermostatCard({
+  thermostat,
+  onOpen,
+}: {
+  thermostat: Thermostat;
+  onOpen: (thermostat: Thermostat, anchor: AnchorRect) => void;
+}) {
   const { name, current, heating, off } = thermostat;
+  const ref = useRef<View>(null);
+
+  // Measured on press rather than from onLayout: the popover needs screen coordinates, and
+  // the card sits inside several nested columns.
+  const open = () => {
+    ref.current?.measureInWindow((x, y, width, height) =>
+      onOpen(thermostat, { x, y, width, height }),
+    );
+  };
 
   return (
-    <View style={[GlobalStyles.tile, styles.card, heating && styles.cardHeating]}>
+    <Pressable
+      ref={ref}
+      onPress={open}
+      accessibilityRole="button"
+      accessibilityLabel={`${name} thermostat`}
+      style={({ pressed }) => [
+        GlobalStyles.tile,
+        styles.card,
+        heating && styles.cardHeating,
+        pressed && GlobalStyles.pressed,
+      ]}
+    >
       {/* Rendered first so it sits behind the text. */}
       {heating && <PulseGlow color={Palette.warn} />}
 
@@ -30,7 +58,7 @@ export function ThermostatCard({ thermostat }: { thermostat: Thermostat }) {
         {round(current)}
         <Text style={Type.mono}>°C</Text>
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

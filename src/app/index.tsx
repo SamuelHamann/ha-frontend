@@ -13,6 +13,8 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionNotice } from '@/components/connection-notice';
+import { ControlThermostat } from '@/components/control-thermostat';
+import { ModalSheet, type AnchorRect } from '@/components/modal-sheet';
 import { Panel } from '@/components/panel';
 import { PowerModal } from '@/components/power-modal';
 import { PulseGlow } from '@/components/pulse-glow';
@@ -37,7 +39,7 @@ import { usePool, type PumpStatus } from '@/hooks/use-pool';
 import { useRoomLights, type RoomLightState } from '@/hooks/use-room-lights';
 import { useRoomPresence } from '@/hooks/use-room-presence';
 import { usePower } from '@/hooks/use-power';
-import { useThermostats } from '@/hooks/use-thermostats';
+import { useThermostats, type Thermostat } from '@/hooks/use-thermostats';
 import { useWeather, type ForecastEntry } from '@/hooks/use-weather';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
@@ -534,6 +536,7 @@ function PoolPanel() {
 function ThermostatsPanel() {
   const thermostats = useThermostats();
   const heating = thermostats.filter((t) => t.heating).length;
+  const [open, setOpen] = useState<{ thermostat: Thermostat; anchor: AnchorRect } | null>(null);
 
   return (
     <Panel style={styles.thermostatPanel}>
@@ -546,9 +549,28 @@ function ThermostatsPanel() {
 
       <View style={styles.thermostatStack}>
         {thermostats.map((thermostat) => (
-          <ThermostatCard key={thermostat.name} thermostat={thermostat} />
+          <ThermostatCard
+            key={thermostat.name}
+            thermostat={thermostat}
+            onOpen={(t, anchor) => setOpen({ thermostat: t, anchor })}
+          />
         ))}
       </View>
+
+      {/* Hangs off the card that opened it. The control is the same one the room modals
+          use, so the optimistic setpoint behaves identically in both places. */}
+      {!!open && (
+        <ModalSheet
+          visible
+          title={open.thermostat.name}
+          subtitle="Set temperature"
+          icon={{ ios: 'thermometer.medium', android: 'thermostat', web: 'thermostat' }}
+          anchor={open.anchor}
+          onClose={() => setOpen(null)}
+        >
+          <ControlThermostat label="Thermostat" deviceId={open.thermostat.deviceId} />
+        </ModalSheet>
+      )}
     </Panel>
   );
 }

@@ -5,11 +5,25 @@
  */
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 
 import { Panel } from '@/components/panel';
 import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
+
+export interface AnchorRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Room to leave around a popover, and the narrowest it may be. */
+const ANCHOR_GAP = 8;
+const ANCHOR_MARGIN = 16;
+const ANCHOR_MIN_WIDTH = 288;
+/** Rough popover height, used only to decide whether it fits below its anchor. */
+const ANCHOR_ESTIMATED_HEIGHT = 240;
 
 export function ModalSheet({
   visible,
@@ -17,6 +31,7 @@ export function ModalSheet({
   subtitle,
   icon,
   accessory,
+  anchor,
   onClose,
   children,
 }: {
@@ -26,9 +41,42 @@ export function ModalSheet({
   icon?: SymbolViewProps['name'];
   /** Rendered in the header, before the close button — a room's presence marker, say. */
   accessory?: ReactNode;
+  /**
+   * Screen rect of the control that opened this. When given, the sheet is pinned just below
+   * that rect instead of centred — a popover hanging off the card you tapped.
+   */
+  anchor?: AnchorRect;
   onClose: () => void;
   children: ReactNode;
 }) {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  // Hangs below the anchor, flipping above it when there isn't room, and never runs off
+  // either edge of the screen.
+  const anchored = anchor
+    ? (() => {
+        const width = Math.min(
+          Math.max(anchor.width, ANCHOR_MIN_WIDTH),
+          screenWidth - ANCHOR_MARGIN * 2,
+        );
+        const left = Math.min(
+          Math.max(anchor.x, ANCHOR_MARGIN),
+          screenWidth - width - ANCHOR_MARGIN,
+        );
+        const below = anchor.y + anchor.height + ANCHOR_GAP;
+        const fitsBelow = below + ANCHOR_ESTIMATED_HEIGHT <= screenHeight - ANCHOR_MARGIN;
+
+        return fitsBelow
+          ? { position: 'absolute' as const, left, width, top: below }
+          : {
+              position: 'absolute' as const,
+              left,
+              width,
+              bottom: screenHeight - anchor.y + ANCHOR_GAP,
+            };
+      })()
+    : null;
+
   return (
     <Modal
       visible={visible}
@@ -48,8 +96,8 @@ export function ModalSheet({
         {/* Tapping the dimmed page closes, as a modal on a wall panel should. */}
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
 
-        <View style={styles.centre} pointerEvents="box-none">
-          <Panel style={styles.sheet}>
+        <View style={[styles.centre, !!anchored && styles.anchoredLayer]} pointerEvents="box-none">
+          <Panel style={[styles.sheet, anchored ?? undefined]}>
             <View style={styles.header}>
               {!!icon && (
                 <View style={styles.iconChip}>
@@ -111,6 +159,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.four,
+  },
+  /** An anchored sheet positions itself, so the centring padding must not shift it. */
+  anchoredLayer: {
+    padding: 0,
   },
   sheet: {
     width: '100%',
