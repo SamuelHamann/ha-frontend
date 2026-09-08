@@ -59,6 +59,22 @@ export const Type = StyleSheet.create({
     color: Palette.textMuted,
     letterSpacing: 2,
   },
+  /** Wall-panel readout: the clock. Monospaced so the digits don't jitter. */
+  display: {
+    fontFamily: Fonts.mono,
+    fontSize: 64,
+    lineHeight: 70,
+    color: Palette.text,
+    letterSpacing: 2,
+  },
+  /** Secondary large readout: a live measurement. */
+  readout: {
+    fontFamily: Fonts.mono,
+    fontSize: 38,
+    lineHeight: 44,
+    color: Palette.primary,
+    letterSpacing: 1,
+  },
   /** Monospaced value: times, counts, readouts. */
   mono: { fontFamily: Fonts.mono, fontSize: 11, lineHeight: 16, color: Palette.textMuted, letterSpacing: 1 },
   monoBright: { fontFamily: Fonts.mono, fontSize: 11, lineHeight: 16, color: Palette.text, letterSpacing: 1 },

@@ -18,9 +18,12 @@ export const DEVICE_IDS = {
   weatherForecast: '9d09db7655dd3d2e84828d2504d427bd',
   /** Garden soil sensor (moisture/temperature). */
   gardenSoilSensor: '43774a897b41752d4c35453e07e3f68c',
+  /** Hilo "Meter00" — the whole-house power meter, used by the Home page. */
+  powerMeter: '8e722c5123c2a349d8ba10834a0797d1',
 } as const;
 
 export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.weatherForecast, label: 'Weather forecast' },
   { id: DEVICE_IDS.gardenSoilSensor, label: 'Garden soil sensor' },
+  { id: DEVICE_IDS.powerMeter, label: 'Power meter' },
 ];

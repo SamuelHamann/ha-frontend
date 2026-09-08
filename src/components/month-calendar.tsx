@@ -250,7 +250,7 @@ export function MonthCalendar({
                             <SymbolView
                               key={badge}
                               name={BADGE_ICONS[badge]}
-                              tintColor={Palette.textMuted}
+                              tintColor={Palette.text}
                               size={badgeSize}
                             />
                           ))}
@@ -339,8 +339,9 @@ const styles = StyleSheet.create({
   },
   /**
    * Sits behind the date and the event dots: absolutely filling the cell keeps it out of the
-   * layout, and rendering it before its siblings puts it underneath them. Faint enough to read
-   * as a watermark, opaque enough to still be legible against either theme's background.
+   * layout, and rendering it before its siblings puts it underneath them. Bright enough to read
+   * across the room against the deep indigo cell, still faint enough to stay a watermark
+   * behind the date.
    */
   badgeLayer: {
     position: 'absolute',
@@ -354,11 +355,11 @@ const styles = StyleSheet.create({
     alignContent: 'center',
     justifyContent: 'center',
     gap: 1,
-    opacity: 0.3,
+    opacity: 0.6,
   },
   /** Fainter still on the padding days, which are themselves dimmed. */
   badgeLayerOutside: {
-    opacity: 0.15,
+    opacity: 0.32,
   },
   dotRow: {
     flexDirection: 'row',
