@@ -24,6 +24,18 @@ export const DEVICE_IDS = {
   poolPlug: '52e7d6ea587cdab5c86d41901a7c6685',
   /** SONOFF "Outdoor - Pool Thermometer" — probe in the pool. */
   poolThermometer: '1f8245a9507e53ad512f47ffff0769dd',
+
+  /**
+   * Hilo thermostats, one per room. Each carries a single `climate.*` entity. The Home page
+   * lists them in the order set by THERMOSTATS in `@/config/home`.
+   */
+  thermostatLivingRoom: '1b91ed162ae5347e9a4baae949a434f0',
+  thermostatKitchen: '5cdda3975276e7a9814f5007fd292ef9',
+  thermostatBedroom: '0774394ea1e9ffa29cfa2a3d85998916',
+  thermostatOffice: 'abcf50e85f7f3b9f86aa4068d79eb202',
+  thermostatGym: 'fb8229a8861a821d849458079a8b1025',
+  thermostatBar: 'b7e78385cd8b27eb5adf2e8c58ef94a7',
+  thermostatLaundry: 'b1984623323adde698d00ffded31a332',
 } as const;
 
 export const WATCHED_DEVICES: WatchedDevice[] = [
@@ -32,4 +44,11 @@ export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.powerMeter, label: 'Power meter' },
   { id: DEVICE_IDS.poolPlug, label: 'Pool plug' },
   { id: DEVICE_IDS.poolThermometer, label: 'Pool thermometer' },
+  { id: DEVICE_IDS.thermostatLivingRoom, label: 'Thermostat — Living Room' },
+  { id: DEVICE_IDS.thermostatKitchen, label: 'Thermostat — Kitchen' },
+  { id: DEVICE_IDS.thermostatBedroom, label: 'Thermostat — Bedroom' },
+  { id: DEVICE_IDS.thermostatOffice, label: 'Thermostat — Office' },
+  { id: DEVICE_IDS.thermostatGym, label: 'Thermostat — Gym' },
+  { id: DEVICE_IDS.thermostatBar, label: 'Thermostat — Bar' },
+  { id: DEVICE_IDS.thermostatLaundry, label: 'Thermostat — Laundry' },
 ];

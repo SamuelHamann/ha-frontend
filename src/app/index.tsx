@@ -1,7 +1,7 @@
-import { SymbolView } from "expo-symbols";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { SymbolView } from 'expo-symbols';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   runOnJS,
@@ -9,27 +9,29 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
-} from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ConnectionNotice } from "@/components/connection-notice";
-import { Panel } from "@/components/panel";
+import { ConnectionNotice } from '@/components/connection-notice';
+import { Panel } from '@/components/panel';
+import { PulseGlow } from '@/components/pulse-glow';
+import { Spin } from '@/components/spin';
+import { Wave } from '@/components/wave';
+import { ThermostatCard } from '@/components/thermostat-card';
 import {
+  AC_PLACEHOLDER,
   FORECAST_SNAPSHOT_HOURS,
   FORECAST_SNAPSHOT_STEP_HOURS,
-} from "@/config/home";
-import {
-  SWIPE_DISTANCE,
-  SWIPE_SLOP,
-  SWIPE_VELOCITY,
-} from "@/constants/gestures";
-import { GlobalStyles, Palette, Spacing, Type } from "@/constants/styles";
-import { conditionIcon, conditionLabel } from "@/constants/weather-icons";
-import { useHaTime, type ClockSource, type HaClock } from "@/hooks/use-ha-time";
-import { usePool, type PumpStatus } from "@/hooks/use-pool";
-import { usePower } from "@/hooks/use-power";
-import { useWeather, type ForecastEntry } from "@/hooks/use-weather";
-import { useHomeAssistantContext } from "@/providers/home-assistant-provider";
+} from '@/config/home';
+import { SWIPE_DISTANCE, SWIPE_SLOP, SWIPE_VELOCITY } from '@/constants/gestures';
+import { GlobalStyles, Palette, Spacing, Type } from '@/constants/styles';
+import { conditionIcon, conditionLabel } from '@/constants/weather-icons';
+import { useHaTime, type ClockSource, type HaClock } from '@/hooks/use-ha-time';
+import { usePool, type PumpStatus } from '@/hooks/use-pool';
+import { usePower } from '@/hooks/use-power';
+import { useThermostats } from '@/hooks/use-thermostats';
+import { useWeather, type ForecastEntry } from '@/hooks/use-weather';
+import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
 interface Snapshot {
   key: string;
@@ -51,9 +53,9 @@ interface Slot {
  * cells filled. So after 8 AM the strip ends on midnight.
  */
 function todaySlots(now: Date): Slot[] {
-  const slots: Slot[] = FORECAST_SNAPSHOT_HOURS.filter(
-    (hour) => hour > now.getHours(),
-  ).map((hour) => ({ hour, dayOffset: 0 }));
+  const slots: Slot[] = FORECAST_SNAPSHOT_HOURS.filter((hour) => hour > now.getHours()).map(
+    (hour) => ({ hour, dayOffset: 0 }),
+  );
 
   let hour = FORECAST_SNAPSHOT_HOURS[FORECAST_SNAPSHOT_HOURS.length - 1];
   let dayOffset = 0;
@@ -80,9 +82,7 @@ function startOfDay(d: Date) {
 }
 
 function daysBetween(from: Date, to: Date) {
-  return Math.round(
-    (startOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000,
-  );
+  return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000);
 }
 
 /**
@@ -115,11 +115,7 @@ function useForecastDays(
 
     const count = Math.max(1, daysBetween(now, lastDay) + 1);
     return Array.from({ length: count }, (_, offset) => {
-      const date = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + offset,
-      );
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
       // Only today rolls; the other days keep the plain schedule.
       const slots: Slot[] =
         offset === 0
@@ -138,7 +134,7 @@ function useForecastDays(
           );
           return {
             key: `${dayOffset}-${hour}`,
-            label: at.toLocaleTimeString([], { hour: "numeric" }).toUpperCase(),
+            label: at.toLocaleTimeString([], { hour: 'numeric' }).toUpperCase(),
             entry: byHour.get(`${at.toDateString()}|${hour}`) ?? null,
           };
         }),
@@ -148,26 +144,26 @@ function useForecastDays(
 }
 
 function dayLabel(offset: number, date: Date) {
-  if (offset === 0) return "TODAY";
-  if (offset === 1) return "TOMORROW";
+  if (offset === 0) return 'TODAY';
+  if (offset === 1) return 'TOMORROW';
   return date
     .toLocaleDateString([], {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
     })
     .toUpperCase();
 }
 
 function round(n?: number | null, digits = 0) {
-  if (n === undefined || n === null || Number.isNaN(n)) return "—";
+  if (n === undefined || n === null || Number.isNaN(n)) return '—';
   return n.toFixed(digits);
 }
 
 const CLOCK_SOURCE_LABEL: Record<ClockSource, string> = {
-  ha: "HOME ASSISTANT",
-  "ha-time": "HA TIME · DEVICE DATE",
-  device: "DEVICE CLOCK",
+  ha: 'HOME ASSISTANT',
+  'ha-time': 'HA TIME · DEVICE DATE',
+  device: 'DEVICE CLOCK',
 };
 
 function ClockPanel({ clock }: { clock: HaClock }) {
@@ -179,15 +175,15 @@ function ClockPanel({ clock }: { clock: HaClock }) {
         <Text style={Type.label}>{CLOCK_SOURCE_LABEL[clock.source]}</Text>
       </View>
       <Text style={Type.display}>
-        {clock.format({ hour: "2-digit", minute: "2-digit", hour12: false })}
+        {clock.format({ hour: '2-digit', minute: '2-digit', hour12: false })}
       </Text>
       <Text style={Type.body}>
         {clock
           .format({
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
           })
           .toUpperCase()}
       </Text>
@@ -207,23 +203,24 @@ function SnapshotCell({ snapshot }: { snapshot: Snapshot }) {
         size={26}
       />
       <Text style={[Type.monoBright, styles.snapshotTemp]}>
-        {entry ? `${round(entry.temperature, 0)}°` : "—"}
+        {entry ? `${round(entry.temperature, 0)}°` : '—'}
       </Text>
       <View style={styles.rainRow}>
         <SymbolView
-          name={{ ios: "drop.fill", android: "water_drop", web: "water_drop" }}
-          tintColor={
-            entry?.precipitation ? Palette.secondary : Palette.textMuted
-          }
+          name={{ ios: 'drop.fill', android: 'water_drop', web: 'water_drop' }}
+          tintColor={entry?.precipitation ? Palette.secondary : Palette.textMuted}
           size={11}
         />
         <Text style={[Type.mono, !!entry?.precipitation && styles.rainWet]}>
-          {entry ? `${round(entry.precipitation ?? 0, 1)} mm` : "—"}
+          {entry ? `${round(entry.precipitation ?? 0, 1)} mm` : '—'}
         </Text>
       </View>
     </View>
   );
 }
+
+/** The right-hand column's cards all share one width so they stack as a single stripe. */
+const SIDE_CARD_WIDTH = 260;
 
 /** How far the card follows the finger, and how far new content slides in from. */
 const DRAG_FOLLOW = 0.4;
@@ -241,8 +238,7 @@ function WeatherPanel({ now }: { now: Date }) {
   const day = days[index];
 
   const page = useCallback(
-    (delta: number) =>
-      setPinned(Math.min(Math.max(index + delta, 0), days.length - 1)),
+    (delta: number) => setPinned(Math.min(Math.max(index + delta, 0), days.length - 1)),
     [index, days.length],
   );
 
@@ -338,11 +334,9 @@ function WeatherPanel({ now }: { now: Date }) {
               <View style={styles.currentText}>
                 <Text style={Type.readout}>
                   {round(attributes.temperature, 1)}
-                  {attributes.temperature_unit ?? "°C"}
+                  {attributes.temperature_unit ?? '°C'}
                 </Text>
-                <Text style={Type.mono}>
-                  {conditionLabel(current?.condition).toUpperCase()}
-                </Text>
+                <Text style={Type.mono}>{conditionLabel(current?.condition).toUpperCase()}</Text>
               </View>
             </View>
           ) : (
@@ -355,14 +349,9 @@ function WeatherPanel({ now }: { now: Date }) {
               <View style={styles.currentText}>
                 <Text style={Type.readout}>
                   {round(day.daily?.temperature, 0)}°
-                  <Text style={Type.mono}>
-                    {" "}
-                    / {round(day.daily?.templow, 0)}°
-                  </Text>
+                  <Text style={Type.mono}> / {round(day.daily?.templow, 0)}°</Text>
                 </Text>
-                <Text style={Type.mono}>
-                  {conditionLabel(day.daily?.condition).toUpperCase()}
-                </Text>
+                <Text style={Type.mono}>{conditionLabel(day.daily?.condition).toUpperCase()}</Text>
               </View>
             </View>
           )}
@@ -398,8 +387,8 @@ function PowerPanel({ clock }: { clock: HaClock }) {
         {!!lastChanged && (
           <Text style={Type.label}>
             {new Date(lastChanged).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
+              hour: '2-digit',
+              minute: '2-digit',
               hour12: false,
             })}
           </Text>
@@ -408,12 +397,12 @@ function PowerPanel({ clock }: { clock: HaClock }) {
 
       <View style={styles.powerRow}>
         <SymbolView
-          name={{ ios: "bolt.fill", android: "bolt", web: "bolt" }}
+          name={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
           tintColor={Palette.warn}
           size={30}
         />
         <Text style={Type.readout}>
-          {watts === null ? "—" : Math.round(watts).toLocaleString()}
+          {watts === null ? '—' : Math.round(watts).toLocaleString()}
         </Text>
         <Text style={Type.mono}>{unit}</Text>
       </View>
@@ -425,7 +414,7 @@ function PowerPanel({ clock }: { clock: HaClock }) {
 
       <View style={styles.powerRow}>
         <Text style={[Type.readout, styles.energyValue]}>
-          {kwhToday === null ? "—" : kwhToday.toFixed(1)}
+          {kwhToday === null ? '—' : kwhToday.toFixed(1)}
         </Text>
         <Text style={Type.mono}>kWh</Text>
       </View>
@@ -434,40 +423,44 @@ function PowerPanel({ clock }: { clock: HaClock }) {
 }
 
 const PUMP_LABEL: Record<PumpStatus, string> = {
-  running: "RUNNING",
-  off: "OFF",
-  unknown: "UNAVAILABLE",
+  running: 'RUNNING',
+  off: 'OFF',
+  unknown: 'UNAVAILABLE',
 };
 
 function PoolPanel() {
   const { status, temperature, temperatureUnit } = usePool();
+  const running = status === 'running';
+
+  const pumpIcon = (
+    <SymbolView
+      name={{ ios: 'fan.fill', android: 'mode_fan', web: 'mode_fan' }}
+      tintColor={running ? Palette.primary : Palette.textMuted}
+      size={18}
+    />
+  );
 
   return (
     <Panel style={styles.poolPanel}>
+      {/* Rendered first so the water sits behind the readings; flat while the pump is off. */}
+      <Wave color={Palette.secondary} still={!running} />
+
       <Text style={Type.label}>POOL</Text>
 
       <View style={GlobalStyles.spread}>
         <View style={styles.poolRow}>
-          <SymbolView
-            name={{ ios: "fan.fill", android: "mode_fan", web: "mode_fan" }}
-            tintColor={
-              status === "running" ? Palette.primary : Palette.textMuted
-            }
-            size={18}
-          />
+          {running ? <Spin>{pumpIcon}</Spin> : pumpIcon}
           <Text style={Type.mono}>PUMP</Text>
         </View>
         <View style={styles.poolRow}>
           <View
             style={[
               GlobalStyles.led,
-              status === "running" && styles.ledOn,
-              status === "unknown" && styles.ledWarn,
+              running && styles.ledOn,
+              status === 'unknown' && styles.ledWarn,
             ]}
           />
-          <Text
-            style={[Type.monoBright, status === "unknown" && styles.warnText]}
-          >
+          <Text style={[Type.monoBright, status === 'unknown' && styles.warnText]}>
             {PUMP_LABEL[status]}
           </Text>
         </View>
@@ -477,9 +470,9 @@ function PoolPanel() {
         <View style={styles.poolRow}>
           <SymbolView
             name={{
-              ios: "thermometer.medium",
-              android: "thermostat",
-              web: "thermostat",
+              ios: 'thermometer.medium',
+              android: 'thermostat',
+              web: 'thermostat',
             }}
             tintColor={Palette.secondary}
             size={18}
@@ -487,9 +480,87 @@ function PoolPanel() {
           <Text style={Type.mono}>WATER</Text>
         </View>
         <Text style={[Type.readout, styles.poolTemp]}>
-          {temperature === null
-            ? "—"
-            : `${temperature.toFixed(1)}${temperatureUnit}`}
+          {temperature === null ? '—' : `${temperature.toFixed(1)}${temperatureUnit}`}
+        </Text>
+      </View>
+    </Panel>
+  );
+}
+
+function ThermostatsPanel() {
+  const thermostats = useThermostats();
+  const heating = thermostats.filter((t) => t.heating).length;
+
+  return (
+    <Panel style={styles.thermostatPanel}>
+      <View style={GlobalStyles.spread}>
+        <Text style={Type.label}>THERMOSTATS</Text>
+        <Text style={[Type.label, heating > 0 && styles.heatingLabel]}>
+          {heating > 0 ? `${heating} HEATING` : 'ALL IDLE'}
+        </Text>
+      </View>
+
+      <View style={styles.thermostatStack}>
+        {thermostats.map((thermostat) => (
+          <ThermostatCard key={thermostat.name} thermostat={thermostat} />
+        ))}
+      </View>
+    </Panel>
+  );
+}
+
+/**
+ * The A/C is not on Home Assistant yet, so this renders fixed values from the config and
+ * says so plainly — a wall panel should never show invented numbers as if they were live.
+ */
+function AcPanel() {
+  const { on, fan, setpoint } = AC_PLACEHOLDER;
+  const accent = on ? Palette.secondary : Palette.textMuted;
+
+  return (
+    <Panel style={styles.acPanel}>
+      {/* Rendered first so the wash sits behind the rows. */}
+      {on && <PulseGlow color={Palette.secondary} />}
+
+      <View style={GlobalStyles.spread}>
+        <Text style={Type.label}>AIR CONDITIONING</Text>
+        <View style={GlobalStyles.chip}>
+          <Text style={Type.label}>PLACEHOLDER</Text>
+        </View>
+      </View>
+
+      <View style={[GlobalStyles.tile, styles.acRow]}>
+        {on ? (
+          <Spin>
+            <SymbolView
+              name={{ ios: 'fan.fill', android: 'mode_fan', web: 'mode_fan' }}
+              tintColor={accent}
+              size={16}
+            />
+          </Spin>
+        ) : (
+          <SymbolView
+            name={{ ios: 'fan.fill', android: 'mode_fan', web: 'mode_fan' }}
+            tintColor={accent}
+            size={16}
+          />
+        )}
+        <Text style={[Type.body, styles.acLabel]}>FAN</Text>
+        <Text style={[styles.acValue, { color: accent }]}>
+          {on ? fan.toUpperCase() : 'OFF'}
+        </Text>
+      </View>
+
+      <View style={[GlobalStyles.tile, styles.acRow]}>
+        <SymbolView
+          name={{ ios: 'snowflake', android: 'ac_unit', web: 'ac_unit' }}
+          tintColor={accent}
+          size={16}
+        />
+        <Text style={[Type.body, styles.acLabel]}>SET</Text>
+        <Text style={[styles.acValue, { color: accent }]}>
+          {setpoint.toFixed(1)}
+          <Text style={Type.mono}>°C</Text>
         </Text>
       </View>
     </Panel>
@@ -499,14 +570,11 @@ function PoolPanel() {
 export default function HomeScreen() {
   const { status, error } = useHomeAssistantContext();
   const clock = useHaTime();
-  const connected = status === "connected";
+  const connected = status === 'connected';
 
   return (
     <View style={GlobalStyles.screen}>
-      <SafeAreaView
-        style={GlobalStyles.content}
-        edges={["bottom", "left", "right"]}
-      >
+      <SafeAreaView style={GlobalStyles.content} edges={['bottom', 'left', 'right']}>
         <View style={styles.columns}>
           {/* Left third: clock, today's weather, live power — stacked. */}
           <View style={styles.sideColumn}>
@@ -524,8 +592,16 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* Top-right pool readout; the rest of this column is reserved. */}
-          <View style={styles.mainColumn}>{connected && <PoolPanel />}</View>
+          {/* Top-right pool readout, with the room thermostats beneath it. */}
+          <View style={styles.mainColumn}>
+            {connected && (
+              <>
+                <PoolPanel />
+                <ThermostatsPanel />
+                <AcPanel />
+              </>
+            )}
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -535,7 +611,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   columns: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: Spacing.three,
   },
   /** One third of the content area; the remaining two thirds are intentionally blank. */
@@ -545,15 +621,47 @@ const styles = StyleSheet.create({
   },
   mainColumn: {
     flex: 2,
-    alignItems: "flex-end",
+    alignItems: 'flex-end',
+    gap: Spacing.three,
+  },
+  thermostatPanel: {
+    width: SIDE_CARD_WIDTH,
+  },
+  thermostatStack: {
+    gap: Spacing.two,
+  },
+  acPanel: {
+    width: SIDE_CARD_WIDTH,
+  },
+  /** Mirrors a thermostat row so the column reads as one stack. */
+  acRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    height: 42,
+  },
+  acLabel: {
+    flex: 1,
+    letterSpacing: 0.8,
+    color: Palette.textMuted,
+  },
+  acValue: {
+    ...Type.monoBright,
+    fontSize: 18,
+    lineHeight: 22,
+    width: 68,
+    textAlign: 'right',
+  },
+  heatingLabel: {
+    color: Palette.warn,
   },
   poolPanel: {
-    width: 260,
+    width: SIDE_CARD_WIDTH,
     gap: Spacing.two,
   },
   poolRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   poolTemp: {
@@ -575,36 +683,36 @@ const styles = StyleSheet.create({
   },
   weatherPanel: {
     flex: 1,
-    justifyContent: "space-between",
+    justifyContent: 'space-between',
   },
   /** The part that slides; the panel border and the page dots stay put around it. */
   weatherBody: {
     flex: 1,
-    justifyContent: "space-between",
+    justifyContent: 'space-between',
     gap: Spacing.two,
   },
   powerPanel: {
     gap: Spacing.two,
   },
   currentRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.three,
   },
   currentText: {
     gap: 2,
   },
   dayNav: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   todayChip: {
     color: Palette.primary,
   },
   pageDots: {
-    flexDirection: "row",
-    justifyContent: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: Spacing.one,
   },
   pageDot: {
@@ -617,12 +725,12 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.primary,
   },
   snapshotRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: Spacing.two,
   },
   snapshot: {
     flex: 1,
-    alignItems: "center",
+    alignItems: 'center',
     gap: Spacing.one,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.one,
@@ -631,16 +739,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   rainRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 3,
   },
   rainWet: {
     color: Palette.secondary,
   },
   powerRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
+    flexDirection: 'row',
+    alignItems: 'baseline',
     gap: Spacing.two,
   },
   /** The day's total is a summary, not the live figure — same size, cooler colour. */

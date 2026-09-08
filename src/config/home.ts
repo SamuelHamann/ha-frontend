@@ -1,9 +1,10 @@
 /**
  * Settings behind the Home page. Not secret, so git-tracked.
  *
- * The power meter itself is a watched device — see `DEVICE_IDS.powerMeter` in
- * `@/config/devices`, which is where hardware belongs.
+ * The hardware itself lives in `@/config/devices` as device ids; this file only says how the
+ * Home page arranges and labels it.
  */
+import { DEVICE_IDS } from '@/config/devices';
 
 /**
  * Today's energy use, in kWh. Hilo's daily `utility_meter` splits the house total across
@@ -38,6 +39,36 @@ export const HA_TIME_ENTITY_IDS = {
   date: 'sensor.date',
   time: 'sensor.time',
 } as const;
+
+/**
+ * Stand-in readings for the A/C card.
+ *
+ * The unit is not connected to Home Assistant yet, so the card renders these and marks
+ * itself as a placeholder rather than pretending to be live. When it is wired up, add its
+ * device id to `@/config/devices` and replace this with a hook, as the thermostats do.
+ */
+export const AC_PLACEHOLDER = {
+  /** Drives the glow and the spinning fan. Flip to false to see the idle card. */
+  on: true,
+  fan: 'Auto',
+  setpoint: 22,
+};
+
+/**
+ * The thermostat cards on the Home page, top to bottom.
+ *
+ * Names and order are fixed here rather than read from HA's area registry, so the list reads
+ * the same way every time regardless of what the areas are called upstream.
+ */
+export const THERMOSTATS = [
+  { name: 'Living Room', deviceId: DEVICE_IDS.thermostatLivingRoom },
+  { name: 'Kitchen', deviceId: DEVICE_IDS.thermostatKitchen },
+  { name: 'Bedroom', deviceId: DEVICE_IDS.thermostatBedroom },
+  { name: 'Office', deviceId: DEVICE_IDS.thermostatOffice },
+  { name: 'Gym', deviceId: DEVICE_IDS.thermostatGym },
+  { name: 'Bar', deviceId: DEVICE_IDS.thermostatBar },
+  { name: 'Laundry', deviceId: DEVICE_IDS.thermostatLaundry },
+];
 
 /**
  * Which outlet of the pool plug drives the pump.
