@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionNotice } from '@/components/connection-notice';
 import { ControlThermostat } from '@/components/control-thermostat';
+import { formatMoney } from '@/components/energy-chart';
 import { ModalSheet, type AnchorRect } from '@/components/modal-sheet';
 import { Panel } from '@/components/panel';
 import { PowerModal } from '@/components/power-modal';
@@ -388,7 +389,7 @@ function WeatherPanel({ now }: { now: Date }) {
 }
 
 function PowerPanel({ clock }: { clock: HaClock }) {
-  const { watts, unit, lastChanged, kwhToday } = usePower();
+  const { watts, unit, lastChanged, kwhToday, costToday } = usePower();
   const [open, setOpen] = useState(false);
 
   return (
@@ -430,11 +431,14 @@ function PowerPanel({ clock }: { clock: HaClock }) {
           <View style={GlobalStyles.dividerRule} />
         </View>
 
-        <View style={styles.powerRow}>
-          <Text style={[Type.readout, styles.energyValue]}>
-            {kwhToday === null ? '—' : kwhToday.toFixed(1)}
-          </Text>
-          <Text style={Type.mono}>kWh</Text>
+        <View style={[styles.powerRow, styles.todayRow]}>
+          <View style={styles.powerRow}>
+            <Text style={[Type.readout, styles.energyValue]}>
+              {kwhToday === null ? '—' : kwhToday.toFixed(1)}
+            </Text>
+            <Text style={Type.mono}>kWh</Text>
+          </View>
+          <Text style={Type.readout}>{costToday === null ? '—' : formatMoney(costToday)}</Text>
         </View>
       </Pressable>
     </Panel>
@@ -878,6 +882,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: Spacing.two,
+  },
+  /** Energy on the left, its cost on the right. */
+  todayRow: {
+    justifyContent: 'space-between',
   },
   /** The day's total is a summary, not the live figure — same size, cooler colour. */
   energyValue: {
