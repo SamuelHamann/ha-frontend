@@ -36,6 +36,21 @@ export const Palette = {
   textMuted: '#9070D8',
 } as const;
 
+/**
+ * Colours for the slices of a stacked chart, in stack order from the bottom. `rest` is the
+ * remainder slice — whatever the named series don't account for.
+ */
+export const Series = {
+  stack: [Palette.warn, Palette.secondary, Palette.primary],
+  rest: Palette.textMuted,
+} as const;
+
+/** Widths of the modal sheet, by how much it has to show. */
+export const SheetWidth = {
+  default: 640,
+  wide: 960,
+} as const;
+
 export const Radius = {
   sm: 4,
   md: 8,

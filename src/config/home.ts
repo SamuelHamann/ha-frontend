@@ -183,10 +183,6 @@ export const OUTDOOR_ROOM: Room = {
   ],
 };
 
-/** Statistic behind the 7-day chart in the power modal — the whole-house energy total. */
-export const ENERGY_STATISTIC_ID = 'sensor.hilo_energy_total';
-export const ENERGY_HISTORY_DAYS = 7;
-
 /**
  * Stand-in readings for the A/C card.
  *

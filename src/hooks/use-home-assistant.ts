@@ -72,6 +72,10 @@ function initialDevices(): WatchedDeviceState[] {
 export function useHomeAssistant() {
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [haVersion, setHaVersion] = useState<string | null>(null);
+  /** HA's configured timezone, e.g. 'America/Toronto'. Null until `get_config` answers. */
+  const [timeZone, setTimeZone] = useState<string | null>(null);
+  /** Whether `serverNow` has been calibrated against HA yet (it is, once states arrive). */
+  const [clockSynced, setClockSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<StateChangedEvent[]>([]);
   const [devices, setDevices] = useState<WatchedDeviceState[]>(initialDevices);
@@ -89,6 +93,9 @@ export function useHomeAssistant() {
     Map<number, { resolve: (result: any) => void; reject: (err: Error) => void }>
   >(new Map());
   const reconnectAttemptRef = useRef(0);
+  // HA's clock minus this device's, in ms. The tablet's clock is not trusted, so anything
+  // that needs "now" — which hour is still running, say — asks for HA's instead.
+  const clockOffsetRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedByUsRef = useRef(false);
 
@@ -172,6 +179,7 @@ export function useHomeAssistant() {
     closedByUsRef.current = false;
     setStatus('connecting');
     setError(null);
+    setClockSynced(false);
 
     const ws = new WebSocket(HA_WS_URL);
     wsRef.current = ws;
@@ -214,6 +222,15 @@ export function useHomeAssistant() {
           for (const sub of subscriptionsRef.current) {
             sub.id = send(sub.message);
           }
+          // The house's timezone: dates and days are reckoned in it, never the tablet's,
+          // whose clock is not trusted.
+          sendCommand({ type: 'get_config' })
+            .then((config: any) => {
+              if (wsRef.current === ws) setTimeZone(config?.time_zone || null);
+            })
+            .catch(() => {
+              // Non-fatal: callers fall back to the device zone.
+            });
           break;
         }
 
@@ -240,6 +257,11 @@ export function useHomeAssistant() {
           const data = msg.event?.data;
           const entityId = data?.entity_id;
           if (!entityId || !entityToDeviceRef.current.has(entityId)) break;
+
+          const stamped = data.new_state?.last_updated
+            ? new Date(data.new_state.last_updated).getTime()
+            : NaN;
+          if (Number.isFinite(stamped)) clockOffsetRef.current = stamped - Date.now();
 
           const newState = data.new_state?.state ?? null;
           const oldState = data.old_state?.state ?? null;
@@ -321,6 +343,11 @@ export function useHomeAssistant() {
             pendingStatesIdRef.current = null;
             if (msg.success) {
               const states: any[] = msg.result ?? [];
+              const newest = Math.max(
+                ...states.map((s) => new Date(s.last_updated ?? 0).getTime() || 0),
+              );
+              if (newest > 0) clockOffsetRef.current = newest - Date.now();
+              setClockSynced(true);
               for (const s of states) {
                 if (!entityToDeviceRef.current.has(s.entity_id)) continue;
                 patchEntity(s.entity_id, {
@@ -366,7 +393,7 @@ export function useHomeAssistant() {
       const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** attempt, RECONNECT_MAX_DELAY_MS);
       reconnectTimerRef.current = setTimeout(connect, delay);
     };
-  }, [send, patchEntity]);
+  }, [send, sendCommand, patchEntity]);
 
   useEffect(() => {
     connect();
@@ -384,7 +411,21 @@ export function useHomeAssistant() {
     return () => clearInterval(timer);
   }, []);
 
-  return { status, haVersion, error, devices, events, subscribe, sendCommand };
+  /** The current instant by Home Assistant's clock. */
+  const serverNow = useCallback(() => new Date(Date.now() + clockOffsetRef.current), []);
+
+  return {
+    status,
+    haVersion,
+    timeZone,
+    clockSynced,
+    error,
+    devices,
+    events,
+    subscribe,
+    sendCommand,
+    serverNow,
+  };
 }
 
 export type UseHomeAssistantResult = ReturnType<typeof useHomeAssistant>;

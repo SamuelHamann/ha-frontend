@@ -5,31 +5,35 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { BarChart, type Bar } from '@/components/bar-chart';
 import { ModalSheet } from '@/components/modal-sheet';
-import { ENERGY_HISTORY_DAYS } from '@/config/home';
+import { ENERGY_DAILY_DAYS, ENERGY_TOTAL_STATISTIC_ID } from '@/config/energy';
 import { GlobalStyles, Palette, Spacing, Type } from '@/constants/styles';
-import { useDailyEnergy } from '@/hooks/use-daily-energy';
+import { useEnergySource, type EnergySource } from '@/hooks/use-energy-statistics';
+
+const HOUSE_TOTAL: EnergySource = { kind: 'energy', statisticId: ENERGY_TOTAL_STATISTIC_ID };
 
 export function PowerModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { entries, loading, error } = useDailyEnergy();
+  const { buckets, error } = useEnergySource(HOUSE_TOTAL);
+  const entries = buckets?.day ?? [];
+  const loading = !buckets;
 
   const bars: Bar[] = entries.map((day) => ({
     key: day.start.toISOString(),
     label: day.start.toLocaleDateString([], { weekday: 'short' }).toUpperCase(),
-    value: day.kwh,
+    value: day.value,
     // Today is still accumulating, so it is drawn hollow rather than compared as an equal.
     muted: day.partial,
   }));
 
   const complete = entries.filter((d) => !d.partial);
   const average = complete.length
-    ? complete.reduce((total, d) => total + d.kwh, 0) / complete.length
+    ? complete.reduce((total, d) => total + d.value, 0) / complete.length
     : null;
 
   return (
     <ModalSheet
       visible={visible}
       title="Power"
-      subtitle={`Last ${ENERGY_HISTORY_DAYS} days`}
+      subtitle={`Last ${ENERGY_DAILY_DAYS} days`}
       icon={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
       onClose={onClose}>
       <View style={[GlobalStyles.tile, styles.body]}>

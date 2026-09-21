@@ -9,7 +9,7 @@ import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'r
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 
 import { Panel } from '@/components/panel';
-import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
+import { GlobalStyles, Palette, Radius, SheetWidth, Spacing, Type } from '@/constants/styles';
 
 export interface AnchorRect {
   x: number;
@@ -32,6 +32,7 @@ export function ModalSheet({
   icon,
   accessory,
   anchor,
+  size = 'default',
   onClose,
   children,
 }: {
@@ -46,6 +47,8 @@ export function ModalSheet({
    * that rect instead of centred — a popover hanging off the card you tapped.
    */
   anchor?: AnchorRect;
+  /** 'wide' for content that needs the room — a 24-bar chart, say. */
+  size?: keyof typeof SheetWidth;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -97,7 +100,7 @@ export function ModalSheet({
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
 
         <View style={[styles.centre, !!anchored && styles.anchoredLayer]} pointerEvents="box-none">
-          <Panel style={[styles.sheet, anchored ?? undefined]}>
+          <Panel style={[styles.sheet, { maxWidth: SheetWidth[size] }, anchored ?? undefined]}>
             <View style={styles.header}>
               {!!icon && (
                 <View style={styles.iconChip}>
@@ -166,7 +169,6 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: '100%',
-    maxWidth: 640,
     maxHeight: '88%',
     gap: Spacing.three,
     shadowColor: '#000000',

@@ -63,8 +63,7 @@ function valid(date: Date | null) {
  * time — `format` handles that, and callers should use it rather than formatting `now`.
  */
 export function useHaTime(): HaClock {
-  const { status, sendCommand } = useHomeAssistantContext();
-  const [timeZone, setTimeZone] = useState<string | undefined>();
+  const timeZone = useHomeAssistantContext().timeZone ?? undefined;
   const [tick, setTick] = useState(() => new Date());
   const states = useEntities(CANDIDATES);
 
@@ -82,21 +81,6 @@ export function useHaTime(): HaClock {
     timer = setTimeout(run, msToNextMinute(new Date()));
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (status !== 'connected') return;
-    let cancelled = false;
-    sendCommand({ type: 'get_config' })
-      .then((config: any) => {
-        if (!cancelled) setTimeZone(config?.time_zone || undefined);
-      })
-      .catch(() => {
-        // Non-fatal: without it we format in the device's own zone.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [status, sendCommand]);
 
   const { now, source, isInstant } = useMemo(() => {
     const stateOf = (id: string) => states[id]?.state ?? null;
