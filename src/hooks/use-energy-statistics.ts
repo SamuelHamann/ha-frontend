@@ -2,22 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   ENERGY_COST_STATISTIC_IDS,
-  ENERGY_DAILY_DAYS,
-  ENERGY_HOURLY_HOURS,
   ENERGY_REFRESH_MS,
   ENERGY_TOTAL_STATISTIC_ID,
 } from '@/config/energy';
+import type { EnergyPeriod, EnergyRange } from '@/hooks/use-energy-range';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
-export type EnergyPeriod = 'hour' | 'day';
-
-export const ENERGY_PERIODS: EnergyPeriod[] = ['hour', 'day'];
-
-/** How many buckets each scale shows. */
-export const PERIOD_COUNT: Record<EnergyPeriod, number> = {
-  hour: ENERGY_HOURLY_HOURS,
-  day: ENERGY_DAILY_DAYS,
-};
+export type { EnergyPeriod, EnergyRange } from '@/hooks/use-energy-range';
 
 const HOUR_MS = 3600 * 1000;
 const PERIOD_MS: Record<EnergyPeriod, number> = { hour: HOUR_MS, day: 24 * HOUR_MS };
@@ -46,7 +37,7 @@ export type EnergySource =
   | { kind: 'power'; statisticId: string }
   | { kind: 'cost'; statisticId: string };
 
-/** Buckets per statistic id, for one period. */
+/** Buckets per statistic id, for one range. */
 export type EnergySeries = Record<string, EnergyBucket[]>;
 
 /**
@@ -74,8 +65,8 @@ function toBucket(source: EnergySource, row: any, period: EnergyPeriod, now: Dat
 
 /**
  * The running hour, folded from the recorder's 5-minute statistics. Hourly long-term
- * statistics are only compiled once the hour closes, so without this the hourly chart
- * would end at the previous hour and today's total would be short by up to an hour.
+ * statistics are only compiled once the hour closes, so without this today's chart would
+ * end at the previous hour and its total would be short by up to an hour.
  */
 function currentHourBucket(source: EnergySource, rows: any[], now: Date): EnergyBucket | null {
   if (rows.length === 0) return null;
@@ -93,31 +84,30 @@ function currentHourBucket(source: EnergySource, rows: any[], now: Date): Energy
   return { start, end, partial: true, value };
 }
 
-async function fetchPeriod(
+async function fetchRange(
   sendCommand: (message: Record<string, unknown>) => Promise<any>,
   sources: EnergySource[],
-  period: EnergyPeriod,
+  range: EnergyRange,
   now: Date,
 ): Promise<EnergySeries> {
-  const count = PERIOD_COUNT[period];
   const statistic_ids = sources.map((s) => s.statisticId);
   const types = ['change', 'mean', 'state'];
+  // The running hour only exists in a day that is still going.
+  const live = range.period === 'hour' && range.end > now.getTime() && range.start <= now.getTime();
 
-  // Plain instant arithmetic: the recorder aligns buckets to the house's own clock, so
-  // asking from `count` periods ago yields the current bucket plus the `count - 1` before
-  // it, whatever zone this device thinks it is in.
   const [response, recent] = await Promise.all([
     sendCommand({
       type: 'recorder/statistics_during_period',
-      start_time: new Date(now.getTime() - count * PERIOD_MS[period]).toISOString(),
+      start_time: new Date(range.start).toISOString(),
+      end_time: new Date(range.end).toISOString(),
       statistic_ids,
-      period,
+      period: range.period,
       types,
     }),
-    period === 'hour'
+    live
       ? sendCommand({
           type: 'recorder/statistics_during_period',
-          start_time: new Date(now.getTime() - HOUR_MS).toISOString(),
+          start_time: new Date(Math.max(now.getTime() - HOUR_MS, range.start)).toISOString(),
           statistic_ids,
           period: '5minute',
           types,
@@ -129,8 +119,9 @@ async function fetchPeriod(
   for (const source of sources) {
     const rows: any[] = response?.[source.statisticId] ?? [];
     const buckets = rows
-      .map((row) => toBucket(source, row, period, now))
-      .filter((b) => Number.isFinite(b.value));
+      .map((row) => toBucket(source, row, range.period, now))
+      // The recorder counts a bucket that starts exactly at `end_time` as inside the range.
+      .filter((b) => Number.isFinite(b.value) && b.start.getTime() < range.end);
     if (recent && !buckets.some((b) => b.partial)) {
       // Only the 5-minute rows past the last compiled hour belong to the running one.
       const lastEnd = buckets.length ? buckets[buckets.length - 1].end.getTime() : 0;
@@ -138,34 +129,31 @@ async function fetchPeriod(
       const running = currentHourBucket(source, fresh, now);
       if (running) buckets.push(running);
     }
-    series[source.statisticId] = buckets.slice(-count);
+    series[source.statisticId] = buckets;
   }
   return series;
 }
 
+type Answer = { series: EnergySeries | null; error: string | null };
+
 /**
- * Consumption per hour and per day for a set of statistics, from the recorder's long-term
- * statistics — the right source rather than raw history, since the recorder keeps them well
- * past its purge window, so a week always resolves.
+ * Statistics for a set of sources over one range, from the recorder's long-term
+ * statistics — the right source rather than raw history, since the recorder keeps them
+ * well past its purge window, so any week resolves.
  *
- * Both scales are fetched together, so flipping a chart between hourly and daily is a
- * client-side switch with nothing to wait for. `byPeriod` is null until the first answer,
- * and the last answer stays up while a periodic refresh is in flight.
+ * Answers are cached by request, so stepping back to a day already seen is instant. While
+ * a new range loads the last answer shown stays up, flagged `loading`, so a chart can keep
+ * its bars rather than blink to a spinner. The range on screen is re-read on a timer,
+ * keeping the running hour and today's total moving.
  */
-export function useEnergyStatistics(sources: EnergySource[]) {
+export function useEnergyStatistics(sources: EnergySource[], range: EnergyRange | null) {
   const { status, clockSynced, sendCommand, serverNow } = useHomeAssistantContext();
-  // Keyed by the request it answers, so a change of sources reads as loading rather than
-  // briefly showing the previous chart under the new labels.
-  const [result, setResult] = useState<{
-    key: string;
-    byPeriod: Record<EnergyPeriod, EnergySeries> | null;
-    error: string | null;
-  } | null>(null);
+  const [cache, setCache] = useState<Map<string, Answer>>(() => new Map());
 
-  const key = sources.map((s) => `${s.kind}:${s.statisticId}`).join(',');
+  const sourcesKey = sources.map((s) => `${s.kind}:${s.statisticId}`).join(',');
+  // No sources (a closed modal, say) means nothing to ask for.
+  const key = range && sourcesKey ? `${sourcesKey}|${range.period}|${range.start}|${range.end}` : '';
 
-  // Re-read on a timer: the running hour keeps growing, and past midnight "today" is a new
-  // set of buckets entirely.
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), ENERGY_REFRESH_MS);
@@ -173,43 +161,51 @@ export function useEnergyStatistics(sources: EnergySource[]) {
   }, []);
 
   useEffect(() => {
-    // Waits for the clock: the windows below are reckoned from HA's "now", not the tablet's.
-    if (status !== 'connected' || !clockSynced || !key) return;
+    // Waits for the clock: which hour is still running is judged by HA's "now", not the tablet's.
+    if (status !== 'connected' || !clockSynced || !key || !range) return;
     let cancelled = false;
-    const wanted = key.split(',').map((part) => {
+    const wanted = sourcesKey.split(',').map((part) => {
       const [kind, statisticId] = part.split(/:(.*)/s);
       return { kind, statisticId } as EnergySource;
     });
 
     (async () => {
+      let answer: Answer;
       try {
-        const now = serverNow();
-        const [hour, day] = await Promise.all(
-          ENERGY_PERIODS.map((period) => fetchPeriod(sendCommand, wanted, period, now)),
-        );
-        if (cancelled) return;
-        setResult({ key, byPeriod: { hour, day }, error: null });
+        answer = { series: await fetchRange(sendCommand, wanted, range, serverNow()), error: null };
       } catch (e) {
-        if (cancelled) return;
-        setResult({
-          key,
-          byPeriod: null,
+        answer = {
+          series: null,
           error: e instanceof Error ? e.message : 'Failed to load energy history',
-        });
+        };
       }
+      if (cancelled) return;
+      setCache((prev) => new Map(prev).set(key, answer));
     })();
 
     return () => {
       cancelled = true;
     };
+    // `range` is fully described by `key`; `sourcesKey` likewise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, clockSynced, sendCommand, serverNow, key, tick]);
 
-  const settled = result?.key === key ? result : null;
-  return { byPeriod: settled?.byPeriod ?? null, error: settled?.error ?? null };
+  // The key whose answer is on screen: this one as soon as it has answered, else the last
+  // one that had. Updated during render, as derived state is.
+  const [shownKey, setShownKey] = useState(key);
+  if (key !== shownKey && cache.has(key)) setShownKey(key);
+
+  const answer = cache.get(key) ?? cache.get(shownKey);
+  return {
+    series: answer?.series ?? null,
+    error: answer?.error ?? null,
+    /** True while the requested range has no answer yet; `series` is then the last shown. */
+    loading: !cache.has(key),
+  };
 }
 
-/** One statistic's buckets for each period — a device's chart. Null source means no data. */
-export function useEnergySource(source: EnergySource | null) {
+/** One statistic's buckets over a range — a device's chart. Null source means no data. */
+export function useEnergySource(source: EnergySource | null, range: EnergyRange) {
   // Keyed on the primitives: callers hand over a fresh object whenever a live reading
   // changes, and that must not refetch a week of statistics.
   const kind = source?.kind;
@@ -218,17 +214,8 @@ export function useEnergySource(source: EnergySource | null) {
     () => (kind && statisticId ? [{ kind, statisticId }] : []),
     [kind, statisticId],
   );
-  const { byPeriod, error } = useEnergyStatistics(sources);
-
-  const buckets = useMemo(
-    () =>
-      byPeriod && statisticId
-        ? { hour: byPeriod.hour[statisticId] ?? [], day: byPeriod.day[statisticId] ?? [] }
-        : null,
-    [byPeriod, statisticId],
-  );
-
-  return { buckets, error };
+  const { series, error, loading } = useEnergyStatistics(sources, range);
+  return { buckets: series && statisticId ? (series[statisticId] ?? []) : null, error, loading };
 }
 
 const HOUSE_TOTAL: EnergySource = { kind: 'energy', statisticId: ENERGY_TOTAL_STATISTIC_ID };
@@ -237,7 +224,7 @@ const COST_SOURCES: EnergySource[] = [
   ...ENERGY_COST_STATISTIC_IDS.map((statisticId) => ({ kind: 'cost' as const, statisticId })),
 ];
 
-/** A recent day as the recorder bounds it, with the price of a kWh on it when known. */
+/** A day as the recorder bounds it, with the price of a kWh on it when known. */
 export interface EnergyDay {
   /** Epoch ms. */
   start: number;
@@ -246,23 +233,31 @@ export interface EnergyDay {
 }
 
 /**
- * The recent days, oldest first, each with its effective price of a kWh: the day's bill
- * divided by the day's consumption. Hilo publishes cost per day only, so this is how an
- * hour, a device, or a category gets priced — its kWh at the rate of the day it fell on.
- * The access fee is in the bill, so it spreads across the day's kWh too.
+ * The days a range covers, each with its effective price of a kWh: the day's bill divided
+ * by the day's consumption. Hilo publishes cost per day only, so this is how an hour, a
+ * device, or a category gets priced — its kWh at the rate of the day it fell on. The
+ * access fee is in the bill, so it spreads across the day's kWh too.
  *
  * Null while loading. Days without a bill (no cost statistics) carry a null rate.
  */
-export function useEnergyDays(): { days: EnergyDay[] | null; error: string | null } {
-  const { byPeriod, error } = useEnergyStatistics(COST_SOURCES);
+export function useEnergyDays(range: EnergyRange): {
+  days: EnergyDay[] | null;
+  error: string | null;
+  loading: boolean;
+} {
+  const dayRange = useMemo<EnergyRange>(
+    () => ({ period: 'day', start: range.start, end: range.end }),
+    [range.start, range.end],
+  );
+  const { series, error, loading } = useEnergyStatistics(COST_SOURCES, dayRange);
 
   const days = useMemo(() => {
-    if (!byPeriod) return null;
+    if (!series) return null;
     const costs =
-      ENERGY_COST_STATISTIC_IDS.map((id) => byPeriod.day[id]).find((rows) => rows?.length) ?? [];
+      ENERGY_COST_STATISTIC_IDS.map((id) => series[id]).find((rows) => rows?.length) ?? [];
     const costByStart = new Map(costs.map((b) => [b.start.getTime(), b.value]));
 
-    return (byPeriod.day[ENERGY_TOTAL_STATISTIC_ID] ?? []).map((day) => {
+    return (series[ENERGY_TOTAL_STATISTIC_ID] ?? []).map((day) => {
       const cost = costByStart.get(day.start.getTime());
       return {
         start: day.start.getTime(),
@@ -270,9 +265,9 @@ export function useEnergyDays(): { days: EnergyDay[] | null; error: string | nul
         rate: cost !== undefined && day.value > 0 ? cost / day.value : null,
       };
     });
-  }, [byPeriod]);
+  }, [series]);
 
-  return { days, error };
+  return { days, error, loading };
 }
 
 /** Whether any day has a bill — else charts show kWh. */
@@ -286,14 +281,4 @@ export function rateFor(days: EnergyDay[], at: Date): number {
   if (own != null) return own;
   const known = days.flatMap((d) => (d.rate === null ? [] : [d.rate]));
   return known.length ? known.reduce((sum, r) => sum + r, 0) / known.length : 0;
-}
-
-/**
- * When today began, by the recorder's reckoning: the latest day it has. In the first hour
- * after midnight that day is not compiled yet, so HA's clock decides whether it is over.
- */
-export function todayStart(days: EnergyDay[], now: number): number {
-  const last = days[days.length - 1];
-  if (!last) return 0;
-  return now >= last.end ? last.end : last.start;
 }

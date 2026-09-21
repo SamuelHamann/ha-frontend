@@ -5,7 +5,7 @@ import { Series } from '@/constants/styles';
 import {
   useEnergyStatistics,
   type EnergyBucket,
-  type EnergyPeriod,
+  type EnergyRange,
   type EnergySeries,
   type EnergySource,
 } from '@/hooks/use-energy-statistics';
@@ -48,10 +48,10 @@ function stack(series: EnergySeries, categories: string[][]): StackedBucket[] {
 }
 
 /**
- * The house total per hour and per day, split into the configured categories plus a
- * remainder — one stacked bar per bucket.
+ * The house total over a range, split into the configured categories plus a remainder —
+ * one stacked bar per bucket.
  */
-export function useEnergyBreakdown() {
+export function useEnergyBreakdown(range: EnergyRange) {
   const devices = useMeteredDevices(ALL_CATEGORY_DEVICES);
 
   // `devices` refreshes with every live reading; that is fine here, since the fetch keys on
@@ -71,15 +71,12 @@ export function useEnergyBreakdown() {
     [devices],
   );
 
-  const { byPeriod, error } = useEnergyStatistics(sources);
+  const { series, error, loading } = useEnergyStatistics(sources, range);
 
-  const buckets = useMemo<Record<EnergyPeriod, StackedBucket[]> | null>(
-    () =>
-      byPeriod
-        ? { hour: stack(byPeriod.hour, categories), day: stack(byPeriod.day, categories) }
-        : null,
-    [byPeriod, categories],
+  const buckets = useMemo<StackedBucket[] | null>(
+    () => (series ? stack(series, categories) : null),
+    [series, categories],
   );
 
-  return { buckets, slices: ENERGY_SLICES, error };
+  return { buckets, slices: ENERGY_SLICES, error, loading };
 }

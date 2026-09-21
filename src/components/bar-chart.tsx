@@ -4,9 +4,10 @@
  * captions it with its value; tapping it pins a bubble of details beside it. A bar may also
  * be split into coloured slices, stacked from the bottom.
  */
-import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { onPressAnywhere } from '@/components/press-away';
 import { GlobalStyles, Palette, Radius, Spacing, Type } from '@/constants/styles';
 
 const DENSE_LABEL_EVERY = 3;
@@ -65,8 +66,8 @@ export function BarChart({
    * sitting around 47% all day — still shows its shape instead of eight identical bars.
    */
   baseline?: 'zero' | 'auto';
-  /** Whether every bar carries its value, or only the one under the pointer or pinned. */
-  captions?: 'all' | 'highlight';
+  /** Whether every bar carries its value, only the one under the pointer or pinned, or none. */
+  captions?: 'all' | 'highlight' | 'none';
   /** Details for the pinned bar, shown in a bubble beside it. Tapping a bar pins it. */
   bubble?: (index: number) => Bubble;
 }) {
@@ -75,6 +76,28 @@ export function BarChart({
   // a pin pointing past the end of the new series.
   const [pinned, setPinned] = useState<string | null>(null);
   const [plotWidth, setPlotWidth] = useState(0);
+  const plotRef = useRef<View>(null);
+  // Set by a bar as a touch begins, so the app-wide press that follows is known to be ours.
+  const touchingBarRef = useRef(false);
+
+  // A press anywhere but on a bar unpins. On the web the document hears every pointer,
+  // modals included, and the plot node says whether it was one of ours; natively the
+  // hierarchy roots report every touch (see PressAwayRoot), and the bar marks its own.
+  useEffect(() => {
+    if (pinned === null) return;
+    if (Platform.OS === 'web') {
+      const onPointerDown = (e: Event) => {
+        const plot = plotRef.current as unknown as { contains?: (n: unknown) => boolean } | null;
+        if (!plot?.contains?.(e.target)) setPinned(null);
+      };
+      document.addEventListener('pointerdown', onPointerDown, true);
+      return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    }
+    return onPressAnywhere(() => {
+      if (touchingBarRef.current) return;
+      setPinned(null);
+    });
+  }, [pinned]);
 
   if (bars.length === 0) {
     return <Text style={Type.bodyMuted}>No data for this period</Text>;
@@ -104,15 +127,16 @@ export function BarChart({
   const pinnedBubble = pinnedIndex >= 0 && bubble && plotWidth > 0 ? bubble(pinnedIndex) : null;
 
   return (
-    <View style={styles.chart}>
+    <Pressable style={styles.chart} onPress={() => setPinned(null)} accessible={false}>
       <View
+        ref={plotRef}
         style={[styles.plot, { height }]}
         onLayout={(e) => setPlotWidth(e.nativeEvent.layout.width)}
       >
         {bars.map((bar, i) => {
           const ratio = (bar.value - floor) / span;
           const lit = !bar.empty && (bar.key === hovered || bar.key === pinned);
-          const showValue = !bar.empty && (captions === 'all' || lit);
+          const showValue = !bar.empty && (captions === 'all' || (captions === 'highlight' && lit));
           const showLabel = !dense || i % DENSE_LABEL_EVERY === 0 || lit;
           const sliceTotal = bar.slices?.reduce((sum, s) => sum + Math.max(s.value, 0), 0) || 1;
           return (
@@ -122,13 +146,22 @@ export function BarChart({
               accessibilityLabel={`${bar.label}: ${bar.value.toFixed(digits)} ${unit}`}
               // Hover for a pointer, tap for a finger; tapping the pinned bar unpins it.
               disabled={bar.empty}
+              // Fires before the root hears the touch, since touches bubble outward.
+              onTouchStart={() => {
+                touchingBarRef.current = true;
+              }}
+              onTouchEnd={() => {
+                touchingBarRef.current = false;
+              }}
               onHoverIn={() => setHovered(bar.key)}
               onHoverOut={() => setHovered((h) => (h === bar.key ? null : h))}
               onPress={() => setPinned((p) => (p === bar.key ? null : bar.key))}
             >
-              <Text style={[styles.value, lit && styles.valueLit]} numberOfLines={1}>
-                {showValue ? bar.value.toFixed(digits) : ' '}
-              </Text>
+              {captions !== 'none' && (
+                <Text style={[styles.value, lit && styles.valueLit]} numberOfLines={1}>
+                  {showValue ? bar.value.toFixed(digits) : ' '}
+                </Text>
+              )}
               <View style={styles.barTrack}>
                 {!bar.empty && (
                 <View
@@ -184,7 +217,7 @@ export function BarChart({
           MAX {max.toFixed(digits)} {unit.toUpperCase()}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

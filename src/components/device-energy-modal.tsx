@@ -2,14 +2,14 @@
  * One metered device's consumption, hourly or daily, in the shared modal shell. The live
  * draw sits in the header so the chart and the "now" reading can be compared at a glance.
  */
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { EnergyChart, PERIOD_SEGMENTS, periodSubtitle } from '@/components/energy-chart';
 import { ModalSheet } from '@/components/modal-sheet';
 import { SegmentedControl } from '@/components/segmented-control';
 import { GlobalStyles, Spacing, Type } from '@/constants/styles';
-import { useEnergyDays, useEnergySource, type EnergyPeriod } from '@/hooks/use-energy-statistics';
+import { useEnergyRange, useEnergyView } from '@/hooks/use-energy-range';
+import { useEnergyDays, useEnergySource } from '@/hooks/use-energy-statistics';
 import type { MeteredDeviceState } from '@/hooks/use-metered-devices';
 
 export function formatWatts(watts: number | null, unit: string) {
@@ -24,18 +24,19 @@ export function DeviceEnergyModal({
   device: MeteredDeviceState | null;
   onClose: () => void;
 }) {
-  const [period, setPeriod] = useState<EnergyPeriod>('hour');
-  const { buckets, error } = useEnergySource(device?.source ?? null);
-  const { days } = useEnergyDays();
+  const { view, setPeriod, back, forward, home } = useEnergyView('hour');
+  const range = useEnergyRange(view);
+  const { buckets, error, loading } = useEnergySource(device?.source ?? null, range);
+  const { days, loading: loadingDays } = useEnergyDays(range);
 
   return (
     <ModalSheet
       visible={device !== null}
       size="wide"
       title={device?.name ?? ''}
-      subtitle={device ? `${formatWatts(device.watts, device.unit)} NOW · ${periodSubtitle(period)}` : undefined}
+      subtitle={device ? `${formatWatts(device.watts, device.unit)} NOW · ${periodSubtitle(view.period)}` : undefined}
       icon={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
-      accessory={<SegmentedControl segments={PERIOD_SEGMENTS} value={period} onChange={setPeriod} />}
+      accessory={<SegmentedControl segments={PERIOD_SEGMENTS} value={view.period} onChange={setPeriod} />}
       onClose={onClose}
     >
       <View style={[GlobalStyles.tile, styles.body]}>
@@ -44,10 +45,15 @@ export function DeviceEnergyModal({
         )}
         {device?.source && (
           <EnergyChart
-            buckets={buckets?.[period] ?? null}
+            view={view}
+            range={range}
+            buckets={buckets}
             days={days}
+            loading={loading || loadingDays}
             error={error}
-            period={period}
+            onBack={back}
+            onForward={forward}
+            onHome={home}
           />
         )}
       </View>

@@ -7,13 +7,15 @@ import { BarChart, type Bar } from '@/components/bar-chart';
 import { ModalSheet } from '@/components/modal-sheet';
 import { ENERGY_DAILY_DAYS, ENERGY_TOTAL_STATISTIC_ID } from '@/config/energy';
 import { GlobalStyles, Palette, Spacing, Type } from '@/constants/styles';
+import { useEnergyRange, type EnergyView } from '@/hooks/use-energy-range';
 import { useEnergySource, type EnergySource } from '@/hooks/use-energy-statistics';
 
 const HOUSE_TOTAL: EnergySource = { kind: 'energy', statisticId: ENERGY_TOTAL_STATISTIC_ID };
+const THIS_WEEK: EnergyView = { period: 'day', offset: 0 };
 
 export function PowerModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { buckets, error } = useEnergySource(HOUSE_TOTAL);
-  const entries = buckets?.day ?? [];
+  const { buckets, error } = useEnergySource(HOUSE_TOTAL, useEnergyRange(THIS_WEEK));
+  const entries = buckets ?? [];
   const loading = !buckets;
 
   const bars: Bar[] = entries.map((day) => ({

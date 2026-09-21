@@ -9,6 +9,7 @@ import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'r
 import { GestureHandlerRootView, ScrollView } from 'react-native-gesture-handler';
 
 import { Panel } from '@/components/panel';
+import { PressAwayRoot } from '@/components/press-away';
 import { GlobalStyles, Palette, Radius, SheetWidth, Spacing, Type } from '@/constants/styles';
 
 export interface AnchorRect {
@@ -96,6 +97,7 @@ export function ModalSheet({
         sliders rather than swallowing their drags.
       */}
       <GestureHandlerRootView style={styles.root}>
+        <PressAwayRoot style={styles.root}>
         {/* Tapping the dimmed page closes, as a modal on a wall panel should. */}
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
 
@@ -139,6 +141,7 @@ export function ModalSheet({
             </ScrollView>
           </Panel>
         </View>
+        </PressAwayRoot>
       </GestureHandlerRootView>
     </Modal>
   );

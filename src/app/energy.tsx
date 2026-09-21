@@ -11,7 +11,8 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { METERED_DEVICES, METERED_THERMOSTATS } from '@/config/energy';
 import { GlobalStyles, Palette, Spacing, Type } from '@/constants/styles';
 import { useEnergyBreakdown } from '@/hooks/use-energy-breakdown';
-import { useEnergyDays, type EnergyPeriod } from '@/hooks/use-energy-statistics';
+import { useEnergyRange, useEnergyView } from '@/hooks/use-energy-range';
+import { useEnergyDays } from '@/hooks/use-energy-statistics';
 import { useMeteredDevices, type MeteredDeviceState } from '@/hooks/use-metered-devices';
 import { usePower } from '@/hooks/use-power';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
@@ -81,15 +82,16 @@ function DeviceGroup({
 
 function HousePanel() {
   const { watts, unit, kwhToday } = usePower();
-  const [period, setPeriod] = useState<EnergyPeriod>('hour');
-  const { buckets, slices, error } = useEnergyBreakdown();
-  const { days } = useEnergyDays();
+  const { view, setPeriod, back, forward, home } = useEnergyView('hour');
+  const range = useEnergyRange(view);
+  const { buckets, slices, error, loading } = useEnergyBreakdown(range);
+  const { days, loading: loadingDays } = useEnergyDays(range);
 
   return (
     <Panel style={styles.housePanel}>
       <View style={GlobalStyles.spread}>
-        <Text style={Type.label}>HOUSE · {periodSubtitle(period).toUpperCase()}</Text>
-        <SegmentedControl segments={PERIOD_SEGMENTS} value={period} onChange={setPeriod} />
+        <Text style={Type.label}>HOUSE · {periodSubtitle(view.period).toUpperCase()}</Text>
+        <SegmentedControl segments={PERIOD_SEGMENTS} value={view.period} onChange={setPeriod} />
       </View>
 
       <View style={styles.readouts}>
@@ -117,12 +119,17 @@ function HousePanel() {
 
       <View style={[GlobalStyles.tile, styles.chartTile]}>
         <EnergyChart
-          buckets={buckets?.[period] ?? null}
+          view={view}
+          range={range}
+          buckets={buckets}
           days={days}
+          loading={loading || loadingDays}
           error={error}
-          period={period}
           slices={slices}
           height={200}
+          onBack={back}
+          onForward={forward}
+          onHome={home}
         />
       </View>
     </Panel>
