@@ -1,8 +1,14 @@
 /**
- * A small bar chart for the modals and the Energy page. Deliberately plain: bars and a
- * label per bar — enough to read a trend at a glance from across the room. Hovering a bar
- * captions it with its value; tapping it pins a bubble of details beside it. A bar may also
- * be split into coloured slices, stacked from the bottom.
+ * A small bar chart for the modals and the Energy page. Deliberately plain: bars, a value
+ * on top and a label per bar — enough to read a trend at a glance from across the room.
+ * Hovering or tapping a bar captions it with its value; tapping pins a bubble of details
+ * beside it. A bar may also be split into coloured slices, stacked from the bottom.
+ *
+ * Values and labels are laid out as their own rows above and below the plot rather than
+ * inside each column, so every bar shares one baseline whether or not its own column is
+ * captioned. (They used to sit in the column, and a blank caption collapsed to nothing on
+ * the web — HTML drops lone whitespace — letting those bars hang a line lower than the
+ * rest, down among the numbers.)
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -14,6 +20,8 @@ const DENSE_LABEL_EVERY = 3;
 const BUBBLE_WIDTH = 208;
 /** Columns are laid out by flex; this must match `styles.plot.gap` for the bubble maths. */
 const COLUMN_GAP = Spacing.one;
+/** Fixed, so a row of captions or labels holds its height even when every cell is blank. */
+const TEXT_ROW_HEIGHT = Type.label.lineHeight;
 
 export interface BarSlice {
   value: number;
@@ -44,6 +52,17 @@ export interface Bubble {
   rows: BubbleRow[];
 }
 
+/** One cell of the caption or label row, lined up with the bar above or below it. */
+function TextCell({ text, style }: { text: string; style: any }) {
+  return (
+    <View style={styles.cell}>
+      <Text style={style} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 export function BarChart({
   bars,
   unit,
@@ -72,8 +91,6 @@ export function BarChart({
   bubble?: (index: number) => Bubble;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  // Keyed rather than indexed: a switch from 24 hourly bars to 7 daily ones must not leave
-  // a pin pointing past the end of the new series.
   const [pinned, setPinned] = useState<string | null>(null);
   const [plotWidth, setPlotWidth] = useState(0);
   const plotRef = useRef<View>(null);
@@ -126,8 +143,26 @@ export function BarChart({
   const pinnedIndex = pinned === null ? -1 : bars.findIndex((b) => b.key === pinned);
   const pinnedBubble = pinnedIndex >= 0 && bubble && plotWidth > 0 ? bubble(pinnedIndex) : null;
 
+  const isLit = (bar: Bar) => !bar.empty && (bar.key === hovered || bar.key === pinned);
+
   return (
     <Pressable style={styles.chart} onPress={() => setPinned(null)} accessible={false}>
+      {captions !== 'none' && (
+        <View style={styles.textRow}>
+          {bars.map((bar, i) => {
+            const lit = isLit(bar);
+            const show = !bar.empty && (captions === 'all' || lit);
+            return (
+              <TextCell
+                key={bar.key}
+                text={show ? bar.value.toFixed(digits) : ''}
+                style={[styles.value, lit && styles.valueLit]}
+              />
+            );
+          })}
+        </View>
+      )}
+
       <View
         ref={plotRef}
         style={[styles.plot, { height }]}
@@ -135,16 +170,13 @@ export function BarChart({
       >
         {bars.map((bar, i) => {
           const ratio = (bar.value - floor) / span;
-          const lit = !bar.empty && (bar.key === hovered || bar.key === pinned);
-          const showValue = !bar.empty && (captions === 'all' || (captions === 'highlight' && lit));
-          const showLabel = !dense || i % DENSE_LABEL_EVERY === 0 || lit;
+          const lit = isLit(bar);
           const sliceTotal = bar.slices?.reduce((sum, s) => sum + Math.max(s.value, 0), 0) || 1;
           return (
             <Pressable
               key={bar.key}
               style={styles.column}
               accessibilityLabel={`${bar.label}: ${bar.value.toFixed(digits)} ${unit}`}
-              // Hover for a pointer, tap for a finger; tapping the pinned bar unpins it.
               disabled={bar.empty}
               // Fires before the root hears the touch, since touches bubble outward.
               onTouchStart={() => {
@@ -157,13 +189,7 @@ export function BarChart({
               onHoverOut={() => setHovered((h) => (h === bar.key ? null : h))}
               onPress={() => setPinned((p) => (p === bar.key ? null : bar.key))}
             >
-              {captions !== 'none' && (
-                <Text style={[styles.value, lit && styles.valueLit]} numberOfLines={1}>
-                  {showValue ? bar.value.toFixed(digits) : ' '}
-                </Text>
-              )}
-              <View style={styles.barTrack}>
-                {!bar.empty && (
+              {!bar.empty && (
                 <View
                   style={[
                     styles.bar,
@@ -189,11 +215,7 @@ export function BarChart({
                     />
                   ))}
                 </View>
-                )}
-              </View>
-              <Text style={[styles.label, lit && styles.labelLit]} numberOfLines={1}>
-                {showLabel ? bar.label : ' '}
-              </Text>
+              )}
             </Pressable>
           );
         })}
@@ -206,6 +228,20 @@ export function BarChart({
             ))}
           </View>
         )}
+      </View>
+
+      <View style={styles.textRow}>
+        {bars.map((bar, i) => {
+          const lit = isLit(bar);
+          const show = !dense || i % DENSE_LABEL_EVERY === 0 || lit;
+          return (
+            <TextCell
+              key={bar.key}
+              text={show ? bar.label : ''}
+              style={[styles.label, lit && styles.labelLit]}
+            />
+          );
+        })}
       </View>
 
       <View style={GlobalStyles.divider}>
@@ -235,19 +271,23 @@ function BubbleLine({ row }: { row: BubbleRow }): ReactNode {
 
 const styles = StyleSheet.create({
   chart: {
-    gap: Spacing.two,
+    gap: 2,
   },
   plot: {
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: COLUMN_GAP,
   },
-  column: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    gap: 2,
+  /** Mirrors the plot's columns, so each cell sits under (or over) its own bar. */
+  textRow: {
+    flexDirection: 'row',
+    gap: COLUMN_GAP,
+    height: TEXT_ROW_HEIGHT,
   },
-  barTrack: {
+  cell: {
+    flex: 1,
+  },
+  column: {
     flex: 1,
     justifyContent: 'flex-end',
   },
@@ -277,12 +317,10 @@ const styles = StyleSheet.create({
   barLit: {
     borderColor: Palette.text,
   },
-  /** Allowed to spill past its column: hourly columns are narrower than a price. */
   value: {
     ...Type.label,
     color: Palette.text,
     textAlign: 'center',
-    marginHorizontal: -Spacing.four,
   },
   valueLit: {
     color: Palette.secondary,
