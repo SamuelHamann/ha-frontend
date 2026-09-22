@@ -52,6 +52,10 @@ export const DEVICE_IDS = {
   bulbBedsideLeft: '3e30ef859bf937ae97aba54b7946b929',
   bulbBedsideRight: '1cbbff8a65358f0c9d8e91c77d5285a4',
   outletOfficeDesk: '8019b4509cdb1fefbcff801badaf0faf',
+  /** Third Reality "Dining - Power Plug Dashboard" — the plug feeding the wall tablet. */
+  outletDiningTablet: 'b5a4c9b3d26307cba8ab106387ebc6cb',
+  /** Hilo "Water heater" — a metered switch, listed on the Energy page. */
+  waterHeater: '03cd250c56b31da90acbe497889083d4',
 
   /** Occupancy sensors. Only these four rooms have one. */
   presenceOffice: 'ea6dd79117f9ad5a2845236d7b54af02',
@@ -82,6 +86,8 @@ export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.bulbBedsideLeft, label: 'Bulb — Bedside left' },
   { id: DEVICE_IDS.bulbBedsideRight, label: 'Bulb — Bedside right' },
   { id: DEVICE_IDS.outletOfficeDesk, label: 'Outlet — Office desk' },
+  { id: DEVICE_IDS.outletDiningTablet, label: 'Outlet — Dining tablet' },
+  { id: DEVICE_IDS.waterHeater, label: 'Water heater' },
   { id: DEVICE_IDS.presenceOffice, label: 'Presence — Office' },
   { id: DEVICE_IDS.presenceBasement, label: 'Presence — Basement' },
   { id: DEVICE_IDS.presenceGym, label: 'Presence — Gym' },

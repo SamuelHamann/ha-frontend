@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppSidebar from '@/components/app-sidebar';
+import { PressAwayRoot } from '@/components/press-away';
 import { HomeAssistantProvider } from '@/providers/home-assistant-provider';
 
 SplashScreen.preventAutoHideAsync();
@@ -27,7 +28,9 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AnimatedSplashOverlay />
         <HomeAssistantProvider>
-          <AppSidebar />
+          <PressAwayRoot style={styles.root}>
+            <AppSidebar />
+          </PressAwayRoot>
         </HomeAssistantProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

@@ -62,6 +62,12 @@ export default function AppSidebar() {
             icon={{ ios: 'cloud.sun', android: 'partly_cloudy_day', web: 'partly_cloudy_day' }}
           />
         </TabTrigger>
+        <TabTrigger name="energy" href="/energy" asChild>
+          <SidebarIconButton
+            accessibilityLabel="Energy"
+            icon={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
+          />
+        </TabTrigger>
         <TabTrigger name="tasks" href="/tasks" asChild>
           <SidebarIconButton
             accessibilityLabel="Tasks and calendar"
