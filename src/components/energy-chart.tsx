@@ -55,7 +55,7 @@ function inZone(date: Date, timeZone: string | null, options: Intl.DateTimeForma
 }
 
 /** What the chart is looking at, as its heading: "TODAY", a date, or a span of dates. */
-function rangeTitle(view: EnergyView, range: EnergyRange, timeZone: string | null) {
+export function rangeTitle(view: EnergyView, range: EnergyRange, timeZone: string | null) {
   if (view.period === 'hour') {
     if (view.offset === 0) return 'Today';
     return inZone(new Date(range.start), timeZone, { weekday: 'long', month: 'short', day: 'numeric' });

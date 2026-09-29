@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { ENERGY_DAILY_DAYS, ENERGY_REFRESH_MS } from '@/config/energy';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
@@ -65,19 +66,45 @@ export function addDays(midnight: number, days: number, timeZone: string | null)
 }
 
 /**
+ * Bumps every `intervalMs`, and immediately whenever the app comes back to the foreground.
+ * A wall tablet's screen can sleep or a browser tab can be backgrounded for hours; JS timers
+ * on the underlying platform are commonly throttled or paused while that happens, so a plain
+ * `setInterval` can silently stop firing and leave the last-computed day on screen until
+ * something forces a fresh render — previously only a full app reload did. Reacting to the
+ * foreground transition closes that gap without waiting for the reload.
+ */
+export function useForegroundTick(intervalMs: number) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    const timer = setInterval(bump, intervalMs);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') bump();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [intervalMs]);
+  return tick;
+}
+
+/**
  * The range a view spans right now, plus the controls to move it. Recomputed on a timer so
- * a wall tablet's "today" rolls over at midnight.
+ * a wall tablet's "today" rolls over at midnight — but only while the view is at the live
+ * edge (offset 0). Once the user has stepped back to a specific day or week, that view is
+ * pinned: `today` stops tracking the clock so history already on screen doesn't silently
+ * slide forward just because midnight passed elsewhere. Landing back on offset 0 (by
+ * forward-ing all the way home, or the Home button) re-syncs it to the live day at once.
  */
 export function useEnergyRange(view: EnergyView) {
   const { timeZone, serverNow } = useHomeAssistantContext();
 
   // The tick only forces a render; `today` below is what actually changes, at midnight.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), ENERGY_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, []);
-  const today = startOfDay(serverNow(), timeZone).getTime();
+  useForegroundTick(ENERGY_REFRESH_MS);
+  const liveToday = startOfDay(serverNow(), timeZone).getTime();
+  const [today, setToday] = useState(liveToday);
+  if (view.offset === 0 && today !== liveToday) setToday(liveToday);
 
   return useMemo<EnergyRange>(() => {
     if (view.period === 'hour') {

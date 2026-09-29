@@ -5,7 +5,7 @@ import {
   ENERGY_REFRESH_MS,
   ENERGY_TOTAL_STATISTIC_ID,
 } from '@/config/energy';
-import type { EnergyPeriod, EnergyRange } from '@/hooks/use-energy-range';
+import { useForegroundTick, type EnergyPeriod, type EnergyRange } from '@/hooks/use-energy-range';
 import { useHomeAssistantContext } from '@/providers/home-assistant-provider';
 
 export type { EnergyPeriod, EnergyRange } from '@/hooks/use-energy-range';
@@ -154,11 +154,7 @@ export function useEnergyStatistics(sources: EnergySource[], range: EnergyRange 
   // No sources (a closed modal, say) means nothing to ask for.
   const key = range && sourcesKey ? `${sourcesKey}|${range.period}|${range.start}|${range.end}` : '';
 
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), ENERGY_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, []);
+  const tick = useForegroundTick(ENERGY_REFRESH_MS);
 
   useEffect(() => {
     // Waits for the clock: which hour is still running is judged by HA's "now", not the tablet's.

@@ -27,7 +27,7 @@ export function DeviceEnergyModal({
   const { view, setPeriod, back, forward, home } = useEnergyView('hour');
   const range = useEnergyRange(view);
   const { buckets, error, loading } = useEnergySource(device?.source ?? null, range);
-  const { days, loading: loadingDays } = useEnergyDays(range);
+  const { days, error: daysError, loading: loadingDays } = useEnergyDays(range);
 
   return (
     <ModalSheet
@@ -50,7 +50,7 @@ export function DeviceEnergyModal({
             buckets={buckets}
             days={days}
             loading={loading || loadingDays}
-            error={error}
+            error={error ?? daysError}
             onBack={back}
             onForward={forward}
             onHome={home}

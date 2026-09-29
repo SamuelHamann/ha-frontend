@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ConnectionNotice } from '@/components/connection-notice';
 import { DeviceEnergyModal, formatWatts } from '@/components/device-energy-modal';
-import { EnergyChart, PERIOD_SEGMENTS, periodSubtitle } from '@/components/energy-chart';
+import { EnergyChart, PERIOD_SEGMENTS, periodSubtitle, rangeTitle } from '@/components/energy-chart';
 import { Panel } from '@/components/panel';
 import { SegmentedControl } from '@/components/segmented-control';
 import { METERED_DEVICES, METERED_THERMOSTATS } from '@/config/energy';
@@ -81,11 +81,17 @@ function DeviceGroup({
 }
 
 function HousePanel() {
-  const { watts, unit, kwhToday } = usePower();
+  const { timeZone } = useHomeAssistantContext();
+  const { watts, unit } = usePower();
   const { view, setPeriod, back, forward, home } = useEnergyView('hour');
   const range = useEnergyRange(view);
   const { buckets, slices, error, loading } = useEnergyBreakdown(range);
-  const { days, loading: loadingDays } = useEnergyDays(range);
+  const { days, error: daysError, loading: loadingDays } = useEnergyDays(range);
+
+  // The same total the chart itself draws (buckets are already trimmed to what has
+  // actually happened), so this readout tracks whichever day or week is selected below.
+  const periodKwh = buckets ? buckets.reduce((sum, b) => sum + b.value, 0) : null;
+  const periodLabel = rangeTitle(view, range, timeZone).toUpperCase();
 
   return (
     <Panel style={styles.housePanel}>
@@ -110,10 +116,10 @@ function HousePanel() {
         <View style={styles.readoutRule} />
         <View style={styles.readout}>
           <Text style={[Type.readout, styles.readoutSecondary]}>
-            {kwhToday === null ? '—' : kwhToday.toFixed(1)}
+            {periodKwh === null ? '—' : periodKwh.toFixed(1)}
             <Text style={Type.mono}> kWh</Text>
           </Text>
-          <Text style={Type.label}>TODAY</Text>
+          <Text style={Type.label}>{periodLabel}</Text>
         </View>
       </View>
 
@@ -124,7 +130,7 @@ function HousePanel() {
           buckets={buckets}
           days={days}
           loading={loading || loadingDays}
-          error={error}
+          error={error ?? daysError}
           slices={slices}
           height={200}
           onBack={back}
