@@ -64,6 +64,11 @@ export const METERED_DEVICES: MeteredDevice[] = [
   },
   { name: 'Office desk', deviceId: DEVICE_IDS.outletOfficeDesk },
   { name: 'Dining tablet', deviceId: DEVICE_IDS.outletDiningTablet },
+  {
+    name: 'Living Room TV',
+    deviceId: DEVICE_IDS.outletLivingRoomTv,
+    energyEntityId: 'sensor.living_room_tv_plug_energy',
+  },
 ];
 
 /**

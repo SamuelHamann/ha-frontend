@@ -54,6 +54,8 @@ export const DEVICE_IDS = {
   outletOfficeDesk: '8019b4509cdb1fefbcff801badaf0faf',
   /** Third Reality "Dining - Power Plug Dashboard" — the plug feeding the wall tablet. */
   outletDiningTablet: 'b5a4c9b3d26307cba8ab106387ebc6cb',
+  /** Third Reality "Living Room - Tv Plug" — metering plug feeding the living room TV. */
+  outletLivingRoomTv: 'fe1197f0e884cefe453f3ecba162b025',
   /** Hilo "Water heater" — a metered switch, listed on the Energy page. */
   waterHeater: '03cd250c56b31da90acbe497889083d4',
 
@@ -87,6 +89,7 @@ export const WATCHED_DEVICES: WatchedDevice[] = [
   { id: DEVICE_IDS.bulbBedsideRight, label: 'Bulb — Bedside right' },
   { id: DEVICE_IDS.outletOfficeDesk, label: 'Outlet — Office desk' },
   { id: DEVICE_IDS.outletDiningTablet, label: 'Outlet — Dining tablet' },
+  { id: DEVICE_IDS.outletLivingRoomTv, label: 'Outlet — Living Room TV' },
   { id: DEVICE_IDS.waterHeater, label: 'Water heater' },
   { id: DEVICE_IDS.presenceOffice, label: 'Presence — Office' },
   { id: DEVICE_IDS.presenceBasement, label: 'Presence — Basement' },
