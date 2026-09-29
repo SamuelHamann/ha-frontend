@@ -69,6 +69,11 @@ export const METERED_DEVICES: MeteredDevice[] = [
     deviceId: DEVICE_IDS.outletLivingRoomTv,
     energyEntityId: 'sensor.living_room_tv_plug_energy',
   },
+  {
+    name: 'Office NAS',
+    deviceId: DEVICE_IDS.outletOfficeNas,
+    energyEntityId: 'sensor.office_nas_plug_energy',
+  },
 ];
 
 /**
